@@ -53,6 +53,7 @@ decoded and may differ from the `LED_task_main` table.
 
 You can't tell either from an OTA app image. **Resolve:** `espefuse.py summary` on the device.
 
-## 10. Which retail product is which variant
+## 10. Which retail product is which variant — RESOLVED
 
-The "RIoT" vs "RIoT+" naming suggests Rest 2nd gen vs Rest+ 2nd gen, but nothing in the image says so.
+The [teardown](teardown.md) unit is model **HBREST2 = Hatch Rest (2nd gen)**, and it is the plain **"RIoT"**
+variant (main board "RIoT Main V1.5"). So RIoT = Rest 2nd gen; by extension RIoT+ = Rest+ 2nd gen.

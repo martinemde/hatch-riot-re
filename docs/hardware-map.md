@@ -4,16 +4,20 @@ Each entry is tagged:
 
 - **[O] observed:** read directly from code or constant data. The address is given.
 - **[I] inferred:** a reasonable reading, not directly proven.
+- **[O, hw]:** confirmed on the physical board — see [teardown.md](teardown.md).
 
 All addresses are virtual addresses in firmware 7.1.644. Function names in `<>` are auto-names taken from strings
 the function references (see [methodology.md](methodology.md)).
+
+**Device:** Hatch **Rest (2nd gen)**, model **HBREST2** — the firmware's "RIoT". Main board silkscreen "RIoT Main
+V1.5" (2021-06-5). [O, hw]
 
 ## SoC
 
 | Item | Value | Tag / evidence |
 |---|---|---|
 | Chip | ESP32 (classic, dual-core Xtensa LX6) | [O] image header `chip_id 0` |
-| Module | ESP32-WROVER / WROVER-E (PSRAM) | [O] strings `ESP32WROVER`, `ESP32WROVERE`; [O] PSRAM driver linked; duplicated stores from the PSRAM cache-bug workaround |
+| Module | **ESP32-WROVER-E**, PCB-antenna variant (8 MB PSRAM) | [O, hw] can marking (photo 11); [O] PSRAM driver + himem use → 8 MB |
 | SDK | ESP-IDF v5.5.4 | [O] app descriptor |
 | Entry | `0x40081b5c` | [O] image header |
 
@@ -148,7 +152,10 @@ The scaling is in `0x4013a330`. It is bypassed when the hardware-info byte equal
 `ledc_set_fade_with_time`.
 
 [I] Channel order is **R, G, B, W**. The LED message's four u16 fields go to ch0..ch3 in order, and the routine
-JSON uses `{"r","g","b","w"}` in that order. Not physically confirmed.
+JSON uses `{"r","g","b","w"}` in that order. The driven *emitters* are confirmed by teardown: a separate LED ring
+board (`SKT1841LWAAW 622042B-U5`) carries **12 RGB LEDs (D1–D12) + 12 white LEDs (W1–W12)** [O, hw] — so R/G/B
+drive the colour LEDs in common and the 4th channel drives the whites. Which LEDC channel is which colour is still
+to be checked on hardware.
 
 The LED driver also needs the expander **LED enable** line (logical pin 0) set high.
 

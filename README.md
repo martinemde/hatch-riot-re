@@ -3,19 +3,21 @@
 Reverse-engineering notes for the Hatch **"riot"** device firmware. The aim is to judge, and eventually build, an
 [ESPHome](https://esphome.io) replacement firmware that controls the same hardware.
 
-All findings come from **static analysis** of one firmware image. Nothing here has been checked on a real device
-yet. See [docs/open-questions.md](docs/open-questions.md) for what still needs hardware confirmation.
+Findings come from **static analysis** of one firmware image, with the hardware map now partly confirmed by a
+[teardown](docs/teardown.md). Behaviour has not been checked on a running device. See
+[docs/open-questions.md](docs/open-questions.md) for what still needs hardware confirmation.
 
 ## Target
 
 | | |
 |---|---|
+| Device | Hatch **Rest (2nd gen)**, model **HBREST2** (confirmed by [teardown](docs/teardown.md)) |
 | File | `riot_e831cd79dc02_riot_DFU_7_1_644.bin` (not committed; see [Getting the image](#getting-the-image)) |
 | Format | ESP-IDF application image, chip ESP32 (`chip_id 0`), SHA-256 appended |
 | Project / version | `riot`, `X.711.644-dirty` (DFU 7.1.644), built Sep 25 2026 |
 | SDK | ESP-IDF v5.5.4 |
-| Module | ESP32-WROVER (PSRAM; built with `-mfix-esp32-psram-cache-issue`) |
-| Variants | firmware detects **"RIoT"** and **"RIoT+"** at boot. That these are the Rest 2nd gen and Rest+ 2nd gen is a guess. |
+| Module | **ESP32-WROVER-E** (PCB antenna, 8 MB PSRAM); built with `-mfix-esp32-psram-cache-issue` |
+| Variants | firmware detects **"RIoT"** (Rest 2nd gen, this unit) and **"RIoT+"** (Rest+ 2nd gen) at boot |
 
 ## Verdict
 
@@ -39,6 +41,8 @@ These parts need custom code:
 
 - [docs/hardware-map.md](docs/hardware-map.md): pins, buses, I2C addresses and peripheral config, each with the
   code address it came from.
+- [docs/teardown.md](docs/teardown.md): annotated disassembly photos — confirms the device (Hatch Rest 2nd gen,
+  HBREST2) and the module (ESP32-WROVER-E, PCB antenna).
 - [docs/display-protocol.md](docs/display-protocol.md): clock display UART protocol, font and brightness tables.
 - [docs/firmware-architecture.md](docs/firmware-architecture.md): firmware tasks, components and cloud stack.
 - [docs/esphome-plan.md](docs/esphome-plan.md): component mapping, draft YAML, and a safe flashing procedure.
