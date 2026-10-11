@@ -37,7 +37,11 @@ scripts/backup.sh /dev/ttyUSB0
 
 If it prints `STOP`, do not continue.
 
-### 1. Flash the probe
+### 1. Flash the probe (serial, once)
+
+The **first** flash must be over serial. The stock firmware has no way to install a third-party image over the
+air (see [Updating over the air](#updating-over-the-air) for why), and you need the serial connection for the
+backup in step 0 anyway.
 
 ```sh
 cd esphome
@@ -47,6 +51,8 @@ cp secrets.yaml.example secrets.yaml   # fill in Wi-Fi etc.
 
 Keep the serial console open (`esphome logs … --device /dev/ttyUSB0`). Every probe result is logged there. A web
 UI is also on `http://hatch-riot-probe.local/`.
+
+After this, you can leave the serial cable off: later updates go [over the air](#updating-over-the-air).
 
 ### 2. Passive checks (no writes)
 
@@ -62,7 +68,7 @@ UI is also on `http://hatch-riot-probe.local/`.
 | GPIO36 CONNECT | note the level with and without the power/base connected | CONNECT meaning |
 | ADC GPIO35 / GPIO39 | record values | ID / supply sense |
 | "Dump accelerometer 0x26" | non-`--` values; reg 0x01 = part ID | accelerometer address |
-| RIoT+ only: add `riot-plus.yaml`, re-flash over OTA | bus 1 scan: 0x10 (GreenPAK), 0x60 (wireless power)? | I2C1 = GPIO13/23 |
+| RIoT+ only: add `riot-plus.yaml`, re-flash [over OTA](#updating-over-the-air) | bus 1 scan: 0x10 (GreenPAK), 0x60 (wireless power)? | I2C1 = GPIO13/23 |
 
 Finish step 2 **before** arming writes. It fills the "seen toggling" guard with the real button pins.
 
@@ -97,6 +103,40 @@ question 1: the pin is a button, not an enable line.
 ```sh
 scripts/restore.sh /dev/ttyUSB0 backups/<mac>_<timestamp>
 ```
+
+## Updating over the air
+
+Only the **first** flash (stock → this firmware) needs serial. Once the probe is running, every later change is
+an ordinary ESPHome OTA over Wi-Fi, so you can close the unit back up:
+
+```sh
+cd esphome
+../.venv-esphome/bin/esphome run hatch-riot-probe.yaml   # no --device; picks the network upload
+```
+
+OTA uploads use the encryption key from `secrets.yaml` (`ota: platform esphome`, with `encryption:`). The
+web-UI upload endpoint is disabled, so that key is the only way in.
+
+**Rollback safety net.** The firmware is built with `enable_ota_rollback: true`
+(`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`), which pairs with the `safe_mode:` component. A freshly OTA'd image
+must boot and connect once to be marked valid; if it crash-loops or never comes up, the bootloader reverts to
+the previous image on its own. So a bad OTA does **not** force you back to the serial cable — the main reason an
+OTA-only workflow is safe here. (This is the same rollback the stock firmware uses: its logs mention
+"rollback cancelled" and "three-pings validation".)
+
+### Why the stock firmware can't OTA this image
+
+The stock firmware does have a remote-update command (`WSUP` → `ota_update_primary_from_url`, reachable over
+serial, BLE and the AWS IoT shadow). It is not a usable path for third-party firmware:
+
+- It downloads to SD/himem and **validates the image** before copying it into the app partition
+  (`ota_image_valid`, "We failed to update the SHA256 hash", "FIRMWARE KEY ERROR"). An unsigned ESPHome image is
+  rejected.
+- The command dispatcher (`command_parser`) gates privileged commands behind a per-session auth byte that BLE and
+  the JSON interface only set after "Auth Match". Those keys are the vendor's.
+
+So there is no supported way to go stock → ESPHome without physical access. See
+[firmware-architecture.md](firmware-architecture.md#update-path) for the full command table.
 
 ## Recording results
 

@@ -28,6 +28,11 @@ esp32:
   flash_size: 4MB
   framework:
     type: esp-idf
+    advanced:
+      # Auto-revert to the previous image if a new OTA boots but can't be reached
+      # (bad Wi-Fi, crash loop). Needs safe_mode + ota, both configured below.
+      # This is the same rollback mechanism the stock firmware relies on.
+      enable_ota_rollback: true
 
 external_components:
   - source:

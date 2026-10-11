@@ -39,6 +39,42 @@ Default routines are embedded as JSON. A step pairs a **colour** with a **sound*
 - Colour channels are **16-bit** (0–65535). Intensity `i` and volume `v` are 0–32767.
 - `controls.button_0` / `button_1` list the routine IDs that each physical button cycles through.
 
+## Update path
+
+OTA runs in `tasks/OTA_task` (`OTA_task_main`), with dual app partitions and an `otadata` selector (standard
+ESP-IDF). The firmware:
+
+- downloads the new image to SD card / himem, then validates it before writing the passive app partition
+  (`ota_download_firmware_to_himem`, `ota_image_valid`, "We failed to update the SHA256 hash", "FIRMWARE KEY
+  ERROR");
+- marks a freshly booted image valid only after a "three-pings" check, and otherwise rolls back
+  (`ota_check_and_record_rollback`, `esp_ota_mark_app_valid_cancel_rollback`, NVS keys `FWRB`/`FWPV`). The
+  ESPHome probe reuses this same bootloader rollback — see
+  [probe-firmware.md](probe-firmware.md#updating-over-the-air).
+
+Updates are requested by command (below), by the AWS IoT shadow (`state_act_on_delta` → `processRequestedFirmware`),
+or from an image already on the SD card.
+
+### Command interface
+
+One dispatcher (`command_main` → `command_parser`) serves a ~98-entry table (at `0x3f483498`) from a single
+queue fed by serial, BLE GATT (`gatts_profile_event_handler`), the JSON/cloud interface (`JSON_interpret`) and
+buttons. Each queued command carries a source tag, and privileged commands require a per-session auth byte that
+BLE/JSON set only after "Auth Match" — so a third party cannot drive them. Notable entries:
+
+| Cmd | Handler | Purpose |
+|---|---|---|
+| `WSUP` | `ota_update_primary_from_url` | update ESP32 app from a URL (validated, signed) |
+| `WSUR` | `ota_update_rt1020_from_url` | update the RT1020 co-processor |
+| `Sc` / `SC` | `set_raw_color` / `set_full_color` | raw / full RGBW |
+| `TCR/TCG/TCB/TCW` | `test_*_leds` | per-channel LED test |
+| `TLRdd` | `set_segment_brightness` | display brightness 0–15 |
+| `WSR` / `TR` | reset / restart | reboot |
+| `GVV` / `MV` | version getters | firmware version |
+
+Because `WSUP` validates and requires a signed image over an authenticated session, it **cannot** be used to
+install ESPHome. The stock → ESPHome transition needs serial access.
+
 ## Factory and debug commands
 
 The test hooks show the hardware blocks directly: `test_red_leds`, `test_green_leds`, `test_blue_leds`,

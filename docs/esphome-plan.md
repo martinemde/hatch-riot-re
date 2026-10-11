@@ -125,6 +125,9 @@ binary_sensor:
    NVS (device certificates, Wi-Fi, calibration) needed to return to stock.
 4. Read the partition table from the backup (`gen_esp32part.py`) and record the layout.
 5. Flash ESPHome over serial. Keep the backup so you can restore with `write_flash 0 hatch_full_backup.bin`.
+6. **Later updates go over the air.** Only this first flash needs serial — the stock firmware will not accept a
+   third-party OTA image, but once ESPHome is on, its own OTA (with bootloader rollback) handles the rest. See
+   [probe-firmware.md](probe-firmware.md#updating-over-the-air).
 
 ## Suggested order
 
