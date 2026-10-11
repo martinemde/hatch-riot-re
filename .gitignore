@@ -1,0 +1,17 @@
+# Vendor firmware images: do not commit
+firmware/
+*.bin
+
+# Analysis output
+work/
+
+.venv/
+__pycache__/
+.venv-esphome/
+
+# ESPHome
+esphome/secrets.yaml
+esphome/.esphome/
+
+# Device flash backups (contain device certificates / Wi-Fi credentials)
+backups/

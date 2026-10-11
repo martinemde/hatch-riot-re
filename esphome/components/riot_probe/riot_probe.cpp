@@ -1,0 +1,273 @@
+#include "riot_probe.h"
+
+#include <cinttypes>
+
+#include <driver/gpio.h>
+
+#include "esphome/core/hal.h"
+#include "esphome/core/helpers.h"
+#include "esphome/core/log.h"
+
+namespace esphome {
+namespace riot_probe {
+
+static const char *const TAG = "riot_probe";
+
+// Only this address may ever be written, and only these registers.
+static const uint8_t EXPANDER_ADDR = 0x58;
+static const uint8_t AW9523B_ID = 0x23;
+static const uint8_t REG_IN0 = 0x00, REG_IN1 = 0x01, REG_OUT0 = 0x02, REG_OUT1 = 0x03, REG_CFG0 = 0x04,
+                     REG_CFG1 = 0x05, REG_ID = 0x10, REG_GCR = 0x11;
+static const uint8_t GCR_P0_PUSH_PULL = 0x10;
+
+// Stock font, ASCII 0x20..0x7E (firmware table at 0x3f486910).
+static const uint8_t FONT[95] = {
+    0x00, 0x86, 0x22, 0x7e, 0x6d, 0xd2, 0x46, 0x20, 0x29, 0x0b, 0x21, 0x70, 0x10, 0x40, 0x80, 0x52,  // ' '../
+    0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x09, 0x0d, 0x61, 0x48, 0x43, 0xd3,  // 0..?
+    0x5f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, 0x3d, 0x76, 0x30, 0x1e, 0x75, 0x38, 0x15, 0x37, 0x3f,  // @..O
+    0x73, 0x6b, 0x33, 0x6d, 0x78, 0x3e, 0x3e, 0x2a, 0x76, 0x6e, 0x5b, 0x39, 0x64, 0x0f, 0x23, 0x08,  // P.._
+    0x02, 0x5f, 0x7c, 0x58, 0x5e, 0x7b, 0x71, 0x6f, 0x74, 0x10, 0x0c, 0x75, 0x30, 0x14, 0x54, 0x5c,  // `..o
+    0x73, 0x67, 0x50, 0x6d, 0x78, 0x1c, 0x1c, 0x14, 0x76, 0x6e, 0x5b, 0x46, 0x30, 0x70, 0x01,        // p..~
+};
+
+// Stock brightness table (0x3f432e0c), index = level 0..15.
+static const uint8_t BRIGHTNESS[16] = {0xfe, 0x7e, 0xbe, 0x3e, 0xde, 0x5e, 0x9e, 0x1e,
+                                       0xee, 0x6e, 0xae, 0x2e, 0xce, 0x4e, 0x8e, 0x0e};
+
+uint8_t seg_encode(char c) {
+  if (c < 0x20 || c > 0x7e)
+    return 0x00;
+  return FONT[c - 0x20];
+}
+
+uint8_t seg_brightness(uint8_t level) { return BRIGHTNESS[level > 15 ? 15 : level]; }
+
+void RiotProbe::setup() {
+  this->detect_variant_();
+  // Wait until every bus is up before the first I2C access.
+  this->ready_at_ = millis() + 2000;
+}
+
+void RiotProbe::detect_variant_() {
+  // Same as stock hal_riot_check_i2c_pins (0x401391d8): inputs with pull-downs, then reset the pins.
+  gpio_config_t cfg{};
+  cfg.pin_bit_mask = (1ULL << 13) | (1ULL << 32) | (1ULL << 23);
+  cfg.mode = GPIO_MODE_INPUT;
+  cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+  cfg.pull_down_en = GPIO_PULLDOWN_ENABLE;
+  cfg.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&cfg);
+  delay(100);
+  this->sense_[0] = gpio_get_level(GPIO_NUM_13);
+  this->sense_[1] = gpio_get_level(GPIO_NUM_32);
+  this->sense_[2] = gpio_get_level(GPIO_NUM_23);
+  gpio_reset_pin(GPIO_NUM_13);
+  gpio_reset_pin(GPIO_NUM_32);
+  gpio_reset_pin(GPIO_NUM_23);
+
+  if (!this->sense_[0] && !this->sense_[1] && !this->sense_[2]) {
+    this->variant_ = "RIoT";
+  } else if (this->sense_[0] && this->sense_[1] && this->sense_[2]) {
+    this->variant_ = "RIoT+";
+  } else {
+    this->variant_ = "ambiguous";
+  }
+  ESP_LOGI(TAG, "Variant sense GPIO13=%u GPIO32=%u GPIO23=%u -> %s", this->sense_[0], this->sense_[1],
+           this->sense_[2], this->variant_.c_str());
+}
+
+bool RiotProbe::read_reg_(uint8_t reg, uint8_t *value) { return this->read_byte(reg, value); }
+
+bool RiotProbe::snapshot_() {
+  this->snapshot_tried_ = true;
+  if (!this->read_reg_(REG_ID, &this->chip_id_)) {
+    ESP_LOGW(TAG, "No response from GPIO expander at 0x%02X", EXPANDER_ADDR);
+    return false;
+  }
+  bool ok = this->read_reg_(REG_OUT0, &this->snap_out_[0]) && this->read_reg_(REG_OUT1, &this->snap_out_[1]) &&
+            this->read_reg_(REG_CFG0, &this->snap_cfg_[0]) && this->read_reg_(REG_CFG1, &this->snap_cfg_[1]) &&
+            this->read_reg_(REG_GCR, &this->snap_gcr_);
+  if (!ok) {
+    ESP_LOGW(TAG, "Expander snapshot failed");
+    return false;
+  }
+  ESP_LOGI(TAG, "Expander ID=0x%02X (%s). Boot snapshot: OUT=%02X %02X CFG=%02X %02X GCR=%02X", this->chip_id_,
+           this->chip_id_ == AW9523B_ID ? "AW9523B" : "NOT AW9523B, writes disabled", this->snap_out_[1],
+           this->snap_out_[0], this->snap_cfg_[1], this->snap_cfg_[0], this->snap_gcr_);
+  this->dump_expander();
+  return true;
+}
+
+bool RiotProbe::read_inputs_(uint16_t *value) {
+  uint8_t p0, p1;
+  if (!this->read_reg_(REG_IN0, &p0) || !this->read_reg_(REG_IN1, &p1))
+    return false;
+  *value = (uint16_t(p1) << 8) | p0;
+  return true;
+}
+
+void RiotProbe::loop() {
+  uint32_t now = millis();
+  if (now < this->ready_at_)
+    return;
+  if (!this->snapshot_tried_)
+    this->snapshot_ok_ = this->snapshot_();
+  if (!this->snapshot_ok_ || now - this->last_poll_ < this->poll_interval_)
+    return;
+  this->last_poll_ = now;
+
+  uint16_t value;
+  if (!this->read_inputs_(&value))
+    return;
+  if (!this->have_inputs_) {
+    this->have_inputs_ = true;
+    this->inputs_ = value;
+    this->change_count_++;
+    ESP_LOGI(TAG, "Expander inputs initial P1:P0 = %02X %02X", value >> 8, value & 0xFF);
+    return;
+  }
+  uint16_t changed = value ^ this->inputs_;
+  if (changed == 0)
+    return;
+  // Ignore changes caused by our own driving of a pin.
+  uint16_t external = changed & ~this->driven_mask_;
+  this->seen_toggling_ |= external;
+  this->inputs_ = value;
+  this->change_count_++;
+  ESP_LOGI(TAG, "Expander inputs P1:P0 = %02X %02X  changed=%04X  seen_toggling=%04X", value >> 8, value & 0xFF,
+           changed, this->seen_toggling_);
+  for (uint8_t bit = 0; bit < 16; bit++) {
+    if (changed & (1u << bit))
+      ESP_LOGI(TAG, "  P%u_%u -> %u", bit / 8, bit % 8, (value >> bit) & 1);
+  }
+}
+
+void RiotProbe::dump(uint8_t address, uint8_t start, uint8_t count) {
+  uint8_t saved = this->address_;
+  this->set_i2c_address(address);
+  ESP_LOGI(TAG, "Register dump 0x%02X [0x%02X..0x%02X] (read only):", address, start, uint8_t(start + count - 1));
+  char line[3 * 16 + 1];
+  for (uint16_t base = start; base < uint16_t(start) + count; base += 16) {
+    size_t pos = 0;
+    for (uint16_t reg = base; reg < base + 16 && reg < uint16_t(start) + count; reg++) {
+      uint8_t v;
+      if (this->read_register(uint8_t(reg), &v, 1) == i2c::ERROR_OK) {
+        pos += snprintf(line + pos, sizeof(line) - pos, "%02X ", v);
+      } else {
+        pos += snprintf(line + pos, sizeof(line) - pos, "-- ");
+      }
+    }
+    ESP_LOGI(TAG, "  %02X: %s", base, line);
+  }
+  this->set_i2c_address(saved);
+}
+
+void RiotProbe::dump_expander() {
+  this->dump(EXPANDER_ADDR, 0x00, 0x08);
+  this->dump(EXPANDER_ADDR, 0x10, 0x04);
+}
+
+void RiotProbe::arm(bool armed) {
+  if (!armed) {
+    if (this->armed_)
+      this->restore();
+    this->armed_ = false;
+    ESP_LOGI(TAG, "Expander writes DISARMED");
+    return;
+  }
+  if (!this->snapshot_ok_ || this->chip_id_ != AW9523B_ID) {
+    ESP_LOGE(TAG, "Refusing to arm: expander not identified as AW9523B (ID=0x%02X)", this->chip_id_);
+    return;
+  }
+  this->armed_ = true;
+  ESP_LOGW(TAG, "Expander writes ARMED. Each change auto-reverts after %" PRIu32 " ms. Pins seen toggling (%04X) are "
+                "never driven.",
+           this->write_timeout_, this->seen_toggling_);
+}
+
+bool RiotProbe::guarded_write_(uint8_t reg, uint8_t value) {
+  if (!this->armed_ || !this->snapshot_ok_ || this->chip_id_ != AW9523B_ID || this->address_ != EXPANDER_ADDR) {
+    ESP_LOGE(TAG, "Write blocked (armed=%d, id=0x%02X)", this->armed_, this->chip_id_);
+    return false;
+  }
+  if (reg != REG_OUT0 && reg != REG_OUT1 && reg != REG_CFG0 && reg != REG_CFG1 && reg != REG_GCR) {
+    ESP_LOGE(TAG, "Write to register 0x%02X blocked", reg);
+    return false;
+  }
+  ESP_LOGI(TAG, "Write expander reg 0x%02X <- 0x%02X", reg, value);
+  return this->write_byte(reg, value);
+}
+
+bool RiotProbe::drive_pin(uint8_t pin, bool high) {
+  if (pin > 15) {
+    ESP_LOGE(TAG, "Pin %u out of range", pin);
+    return false;
+  }
+  uint16_t bit = 1u << pin;
+  if (this->seen_toggling_ & bit) {
+    ESP_LOGE(TAG, "Refusing to drive P%u_%u: it has been seen acting as an input", pin / 8, pin % 8);
+    return false;
+  }
+  uint8_t port = pin / 8, mask = 1u << (pin % 8);
+  uint8_t out, cfg;
+  if (!this->read_reg_(port ? REG_OUT1 : REG_OUT0, &out) || !this->read_reg_(port ? REG_CFG1 : REG_CFG0, &cfg))
+    return false;
+  out = high ? (out | mask) : (out & ~mask);
+  cfg &= ~mask;  // 0 = output
+  if (!this->armed_) {
+    ESP_LOGE(TAG, "Write blocked: not armed");
+    return false;
+  }
+  // Mark the pin and schedule the revert before writing, so a half-done write still gets undone.
+  this->driven_mask_ |= bit;
+  this->set_timeout("revert", this->write_timeout_, [this]() { this->restore(); });
+  // Set the level first so the pin comes up in the requested state.
+  if (!this->guarded_write_(port ? REG_OUT1 : REG_OUT0, out) ||
+      !this->guarded_write_(port ? REG_CFG1 : REG_CFG0, cfg)) {
+    this->restore();
+    return false;
+  }
+  ESP_LOGW(TAG, "Driving P%u_%u %s (auto-revert in %" PRIu32 " ms)", port, pin % 8, high ? "HIGH" : "LOW",
+           this->write_timeout_);
+  return true;
+}
+
+bool RiotProbe::set_p0_push_pull(bool push_pull) {
+  uint8_t gcr;
+  if (!this->read_reg_(REG_GCR, &gcr))
+    return false;
+  gcr = push_pull ? (gcr | GCR_P0_PUSH_PULL) : (gcr & ~GCR_P0_PUSH_PULL);
+  if (!this->guarded_write_(REG_GCR, gcr))
+    return false;
+  this->gcr_modified_ = true;
+  this->set_timeout("revert", this->write_timeout_, [this]() { this->restore(); });
+  return true;
+}
+
+void RiotProbe::restore() {
+  this->cancel_timeout("revert");
+  if (!this->snapshot_ok_ || (this->driven_mask_ == 0 && !this->gcr_modified_))
+    return;
+  // Go back to inputs first, then restore levels and mode. Restore writes skip the arm check.
+  bool ok = this->write_byte(REG_CFG0, this->snap_cfg_[0]) && this->write_byte(REG_CFG1, this->snap_cfg_[1]) &&
+            this->write_byte(REG_OUT0, this->snap_out_[0]) && this->write_byte(REG_OUT1, this->snap_out_[1]) &&
+            this->write_byte(REG_GCR, this->snap_gcr_);
+  ESP_LOGW(TAG, "Expander restored to boot snapshot: %s", ok ? "ok" : "FAILED");
+  if (ok) {
+    this->driven_mask_ = 0;
+    this->gcr_modified_ = false;
+    // Take a fresh baseline so pins settling back to input level aren't recorded as button activity.
+    this->have_inputs_ = false;
+  }
+}
+
+void RiotProbe::dump_config() {
+  ESP_LOGCONFIG(TAG, "RIoT probe:");
+  LOG_I2C_DEVICE(this);
+  ESP_LOGCONFIG(TAG, "  Variant: %s (GPIO13=%u GPIO32=%u GPIO23=%u)", this->variant_.c_str(), this->sense_[0],
+                this->sense_[1], this->sense_[2]);
+  ESP_LOGCONFIG(TAG, "  Poll interval: %" PRIu32 " ms, write timeout: %" PRIu32 " ms", this->poll_interval_, this->write_timeout_);
+}
+
+}  // namespace riot_probe
+}  // namespace esphome

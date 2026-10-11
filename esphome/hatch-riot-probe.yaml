@@ -1,0 +1,449 @@
+# Hatch "riot" PROBE firmware. Its only job is to confirm the hardware map in ../docs/hardware-map.md.
+#
+# Safety model (see ../docs/probe-firmware.md):
+#   * Passive by default. Nothing is driven at boot except the bus/peripheral pins the stock firmware
+#     itself drives (I2C, LEDC, I2S, display UART TX). All lights and sound start OFF.
+#   * The ONLY I2C writes possible are to the GPIO expander (0x58), and only when "Expander writes armed"
+#     is on, the chip identifies as AW9523B, and the pin hasn't been seen acting as an input.
+#     Every write auto-reverts to the boot snapshot after 30 s.
+#   * GreenPAK (0x08/0x10), wireless-power IC (0x60), display MCU I2C (0x70) and the accelerometer are
+#     never written. The accelerometer is only read.
+#   * No deep sleep, no ULP, no battery/charge control. Run RIoT+ units on EXTERNAL POWER.
+#   * LED channels are capped at the stock firmware's own limits.
+#
+# Flash ONLY after scripts/backup.sh has made and verified a full-flash backup.
+
+substitutions:
+  name: hatch-riot-probe
+  friendly_name: Hatch RIoT Probe
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: Diagnostic firmware for confirming the reverse-engineered Hatch riot hardware map
+
+esp32:
+  board: esp32dev
+  # Smaller than the real flash is harmless; the module is at least 4 MB.
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [riot_probe]
+
+logger:
+  level: DEBUG
+  baud_rate: 115200
+  logs:
+    sensor: INFO
+    adc: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+      key: !secret api_encryption_key
+
+safe_mode:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Hatch Probe Fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+  # No unauthenticated firmware upload from the web UI; OTA only via the encrypted esphome platform.
+  ota: false
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+# ---------------------------------------------------------------- I2C (read-mostly)
+i2c:
+  - id: bus_a
+    sda:
+      number: GPIO0
+      ignore_strapping_warning: true
+    scl: GPIO22
+    # Stock uses 400 kHz. 100 kHz is gentler and enough for probing.
+    frequency: 100kHz
+    # Stock disables the internal pull-ups (external pull-ups on the board). If the scan finds nothing,
+    # set these to true and retry.
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+    # Logs every ACKing address at boot: expect 0x58 (expander), maybe 0x26 (accel), 0x70 (display).
+    scan: true
+
+riot_probe:
+  id: probe
+  i2c_id: bus_a
+  address: 0x58
+  poll_interval: 50ms
+  write_timeout: 30s
+
+# ---------------------------------------------------------------- Night-light LEDs
+# One light per channel so the colour order can be confirmed. max_power = stock caps (0x4013a330).
+output:
+  - platform: ledc
+    id: led_ch0
+    pin:
+      number: GPIO5
+      ignore_strapping_warning: true
+    frequency: 19500Hz
+    max_power: 50%
+  - platform: ledc
+    id: led_ch1
+    pin: GPIO18
+    frequency: 19500Hz
+    max_power: 37.5%
+  - platform: ledc
+    id: led_ch2
+    pin: GPIO19
+    frequency: 19500Hz
+    max_power: 25%
+  - platform: ledc
+    id: led_ch3
+    pin: GPIO4
+    frequency: 19500Hz
+    max_power: 25%
+
+light:
+  - platform: monochromatic
+    name: "LED ch0 GPIO5 (expect red)"
+    output: led_ch0
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0.3s
+  - platform: monochromatic
+    name: "LED ch1 GPIO18 (expect green)"
+    output: led_ch1
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0.3s
+  - platform: monochromatic
+    name: "LED ch2 GPIO19 (expect blue)"
+    output: led_ch2
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0.3s
+  - platform: monochromatic
+    name: "LED ch3 GPIO4 (expect white)"
+    output: led_ch3
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0.3s
+
+# ---------------------------------------------------------------- Audio (I2S -> amp)
+i2s_audio:
+  - id: i2s_out
+    i2s_lrclk_pin: GPIO25
+    i2s_bclk_pin: GPIO26
+
+speaker:
+  - platform: i2s_audio
+    id: spk
+    i2s_audio_id: i2s_out
+    dac_type: external
+    i2s_dout_pin: GPIO21
+    # Same samples on both slots, so it works whichever slot the amp listens to.
+    channel: mono
+    bits_per_sample: 16bit
+    sample_rate: 16000
+
+rtttl:
+  id: beeper
+  speaker: spk
+  gain: 25%
+
+# ---------------------------------------------------------------- Clock display (UART1 TX only)
+uart:
+  id: disp_uart
+  tx_pin: GPIO27
+  baud_rate: 19200
+  data_bits: 8
+  parity: ODD
+  stop_bits: 1
+
+globals:
+  - id: disp_misc
+    type: uint8_t
+    initial_value: "0"
+  - id: last_change_count
+    type: uint32_t
+    initial_value: "0"
+
+script:
+  - id: send_display
+    parameters:
+      txt: std::string
+    then:
+      - lambda: |-
+          std::string s = txt;
+          while (s.size() < 4) s.insert(s.begin(), ' ');
+          uint8_t f[6] = {0x08,
+                          esphome::riot_probe::seg_encode(s[0]), esphome::riot_probe::seg_encode(s[1]),
+                          esphome::riot_probe::seg_encode(s[2]), esphome::riot_probe::seg_encode(s[3]),
+                          (uint8_t) (id(disp_misc) & 0x07)};
+          id(disp_uart).write_array(f, sizeof(f));
+          ESP_LOGI("display", "TX %02X %02X %02X %02X %02X %02X ('%s')", f[0], f[1], f[2], f[3], f[4], f[5],
+                   s.substr(0, 4).c_str());
+  - id: send_raw_segments
+    parameters:
+      seg: uint8_t
+    then:
+      - lambda: |-
+          uint8_t f[6] = {0x08, seg, seg, seg, seg, (uint8_t) (id(disp_misc) & 0x07)};
+          id(disp_uart).write_array(f, sizeof(f));
+          ESP_LOGI("display", "TX raw segments 0x%02X misc %u", seg, f[5]);
+
+text:
+  - platform: template
+    name: "Display text (4 chars)"
+    mode: text
+    max_length: 4
+    optimistic: true
+    initial_value: "1234"
+    set_action:
+      - script.execute:
+          id: send_display
+          txt: !lambda return x;
+
+number:
+  - platform: template
+    name: "Display misc bits (0-7)"
+    min_value: 0
+    max_value: 7
+    step: 1
+    optimistic: true
+    initial_value: 0
+    set_action:
+      - lambda: id(disp_misc) = (uint8_t) x;
+      - script.execute:
+          id: send_raw_segments
+          seg: 0x7F  # "8" without the decimal point, to see what misc lights up
+  - platform: template
+    name: "Display brightness level (0-15)"
+    min_value: 0
+    max_value: 15
+    step: 1
+    optimistic: true
+    initial_value: 8
+    set_action:
+      - lambda: |-
+          uint8_t f[2] = {0x18, esphome::riot_probe::seg_brightness((uint8_t) x)};
+          id(disp_uart).write_array(f, sizeof(f));
+          ESP_LOGI("display", "TX brightness level %d -> %02X %02X", (int) x, f[0], f[1]);
+  - platform: template
+    id: exp_test_pin
+    name: "Expander test pin (0-15 = P0_0..P1_7)"
+    min_value: 0
+    max_value: 15
+    step: 1
+    optimistic: true
+    initial_value: 0
+
+select:
+  - platform: template
+    name: "Display UART parity"
+    options: ["ODD", "NONE", "EVEN"]
+    initial_option: "ODD"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          using namespace esphome::uart;
+          id(disp_uart).set_parity(x == "NONE" ? UART_CONFIG_PARITY_NONE
+                                   : x == "EVEN" ? UART_CONFIG_PARITY_EVEN
+                                                 : UART_CONFIG_PARITY_ODD);
+          id(disp_uart).load_settings(false);
+          ESP_LOGI("display", "Parity -> %s", x.c_str());
+  - platform: template
+    id: exp_test_level
+    name: "Expander test level"
+    options: ["HIGH", "LOW"]
+    initial_option: "HIGH"
+    optimistic: true
+
+# ---------------------------------------------------------------- Guarded expander writes
+switch:
+  - platform: template
+    name: "Expander writes armed"
+    icon: mdi:alert
+    restore_mode: ALWAYS_OFF
+    lambda: return id(probe).armed();
+    turn_on_action:
+      - lambda: id(probe).arm(true);
+    turn_off_action:
+      - lambda: id(probe).arm(false);
+  - platform: template
+    name: "Expander P0 push-pull (stock mode)"
+    restore_mode: ALWAYS_OFF
+    lambda: return id(probe).p0_push_pull_modified();
+    turn_on_action:
+      - lambda: id(probe).set_p0_push_pull(true);
+    turn_off_action:
+      - lambda: id(probe).restore();
+
+button:
+  - platform: template
+    name: "Expander: drive test pin"
+    on_press:
+      - lambda: id(probe).drive_pin((uint8_t) id(exp_test_pin).state, id(exp_test_level).current_option() == "HIGH");
+  - platform: template
+    name: "Expander: restore boot state"
+    on_press:
+      - lambda: id(probe).restore();
+  - platform: template
+    name: "Hypothesis: LED enable = P0_0 high"
+    on_press:
+      - lambda: id(probe).drive_pin(0, true);
+  - platform: template
+    name: "Hypothesis: SD power = P0_1 high"
+    on_press:
+      - lambda: id(probe).drive_pin(1, true);
+  - platform: template
+    name: "Hypothesis: amp enable = P0_2 high"
+    on_press:
+      - lambda: id(probe).drive_pin(2, true);
+  - platform: template
+    name: "Hypothesis: touch enable = P1_1 high"
+    on_press:
+      - lambda: id(probe).drive_pin(9, true);
+
+  # Read-only dumps
+  - platform: template
+    name: "Dump expander registers"
+    on_press:
+      - lambda: id(probe).dump_expander();
+  - platform: template
+    name: "Dump accelerometer 0x26 (read only)"
+    on_press:
+      - lambda: id(probe).dump(0x26, 0x00, 0x40);
+  - platform: template
+    name: "Dump accelerometer 0x27 (read only)"
+    on_press:
+      - lambda: id(probe).dump(0x27, 0x00, 0x40);
+
+  # Audio
+  - platform: template
+    name: "Audio: short beep (25% gain)"
+    on_press:
+      - rtttl.play: "beep:d=8,o=5,b=120:c6,e6,g6"
+  - platform: template
+    name: "Audio: stop"
+    on_press:
+      - rtttl.stop
+
+  # Display
+  - platform: template
+    name: "Display: blank"
+    on_press:
+      - script.execute:
+          id: send_display
+          txt: "    "
+  - platform: template
+    name: "Display: all segments (8.8.8.8.)"
+    on_press:
+      - script.execute:
+          id: send_raw_segments
+          seg: 0xFF
+  - platform: template
+    name: "Display: current time"
+    on_press:
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          if (!t.is_valid()) { ESP_LOGW("display", "Time not synced yet"); return; }
+          char buf[5];
+          snprintf(buf, sizeof(buf), "%2d%02d", t.hour % 12 == 0 ? 12 : t.hour % 12, t.minute);
+          id(send_display)->execute(std::string(buf));
+
+  - platform: restart
+    name: "Restart"
+
+# ---------------------------------------------------------------- Inputs (read only)
+binary_sensor:
+  - platform: gpio
+    name: "GPIO33 TOUCH (active high)"
+    pin:
+      number: GPIO33
+      mode: INPUT
+  - platform: gpio
+    name: "GPIO36 CONNECT (raw level)"
+    pin:
+      number: GPIO36
+      mode: INPUT
+  - platform: gpio
+    name: "GPIO34 expander INT (raw level)"
+    pin:
+      number: GPIO34
+      mode: INPUT
+
+sensor:
+  - platform: adc
+    name: "GPIO35 ADC1_CH7 (hw ID)"
+    pin: GPIO35
+    attenuation: 12db
+    update_interval: 5s
+  - platform: adc
+    name: "GPIO39 ADC1_CH3 (supply or battery)"
+    pin: GPIO39
+    attenuation: 12db
+    update_interval: 5s
+  - platform: wifi_signal
+    name: "WiFi signal"
+    update_interval: 60s
+  - platform: uptime
+    name: "Uptime"
+
+text_sensor:
+  - platform: template
+    id: ts_variant
+    name: "Board variant"
+    update_interval: never
+  - platform: template
+    id: ts_exp_id
+    name: "Expander chip ID"
+    update_interval: never
+  - platform: template
+    id: ts_exp_inputs
+    name: "Expander inputs P1:P0"
+    update_interval: never
+  - platform: template
+    id: ts_exp_seen
+    name: "Expander bits seen toggling"
+    update_interval: never
+  - platform: version
+    name: "ESPHome version"
+
+interval:
+  # Publish expander state only when it changes.
+  - interval: 100ms
+    then:
+      - lambda: |-
+          if (id(probe).change_count() == id(last_change_count)) return;
+          id(last_change_count) = id(probe).change_count();
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%02X %02X", id(probe).inputs() >> 8, id(probe).inputs() & 0xFF);
+          id(ts_exp_inputs).publish_state(buf);
+          snprintf(buf, sizeof(buf), "%04X", id(probe).seen_toggling());
+          id(ts_exp_seen).publish_state(buf);
+  - interval: 30s
+    startup_delay: 5s
+    then:
+      - lambda: |-
+          id(ts_variant).publish_state(id(probe).variant());
+          char buf[32];
+          if (id(probe).expander_ok())
+            snprintf(buf, sizeof(buf), "0x%02X%s", id(probe).chip_id(), id(probe).chip_id() == 0x23 ? " (AW9523B)" : "");
+          else
+            snprintf(buf, sizeof(buf), "not found");
+          id(ts_exp_id).publish_state(buf);

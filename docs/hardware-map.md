@@ -1,0 +1,207 @@
+# Hardware map
+
+Each entry is tagged:
+
+- **[O] observed:** read directly from code or constant data. The address is given.
+- **[I] inferred:** a reasonable reading, not directly proven.
+
+All addresses are virtual addresses in firmware 7.1.644. Function names in `<>` are auto-names taken from strings
+the function references (see [methodology.md](methodology.md)).
+
+## SoC
+
+| Item | Value | Tag / evidence |
+|---|---|---|
+| Chip | ESP32 (classic, dual-core Xtensa LX6) | [O] image header `chip_id 0` |
+| Module | ESP32-WROVER / WROVER-E (PSRAM) | [O] strings `ESP32WROVER`, `ESP32WROVERE`; [O] PSRAM driver linked; duplicated stores from the PSRAM cache-bug workaround |
+| SDK | ESP-IDF v5.5.4 | [O] app descriptor |
+| Entry | `0x40081b5c` | [O] image header |
+
+Image segments:
+
+| # | Load address | Length | Region |
+|---|---|---|---|
+| 0 | `0x3f400020` | `0xc218c` | DROM (rodata, strings) |
+| 1 | `0x3ffbdb60` | `0xde64` | DRAM (.data) |
+| 2 | `0x400d0020` | `0x1571f0` | IROM (flash code) |
+| 3 | `0x3ffcb9c4` | `0xa498` | DRAM |
+| 4 | `0x40080000` | `0x1d754` | IRAM |
+| 5 | `0x50000298` | `0x80` | RTC slow memory |
+
+## Board-variant detection
+
+`<hal_riot_check_i2c_pins>` at `0x401391d8` [O]:
+
+- Configures **GPIO13, GPIO32, GPIO23** as inputs with the internal pull-down on.
+- Waits 50 ticks, then reads them.
+- All three low → **"RIoT"** (hw type 1). Logs `RIoT Hardware found.`
+- Pins 13 and 32 high (and 23 high) → **"RIoT+"** (hw type 2). Logs `RIoT Plus hardware found.`
+- Anything else → logs an error and defaults to RIoT+.
+
+[I] On RIoT+ these pins carry the second I2C bus, so the bus's external pull-ups pull them high. The hw type is
+stored at `0x3ffd8844` and read through `0x40139d14`.
+
+## I2C
+
+`<i2c_task_init>` at `0x401c6190` [O]. Both buses use legacy `i2c_param_config` in master mode at
+**400 kHz** (`0x61a80`), with internal pull-ups **disabled**.
+
+| Bus | SDA | SCL | Present on |
+|---|---|---|---|
+| I2C0 | **GPIO0** | **GPIO22** | all |
+| I2C1 | **GPIO13** | **GPIO23** | RIoT+ only (set up when hw type == 2) |
+
+All device traffic goes through a single I2C job task (`i2c_task_main`). It sends dummy transactions to recover
+the bus at boot.
+
+### I2C devices
+
+The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed here.
+
+| Device | 7-bit addr | Evidence | Notes |
+|---|---|---|---|
+| GPIO expander **AW9523B** (or **AW9110B**) | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0` | Driver supports both chips (`gpioe_aw9523b_*`, `gpioe_aw9110b_*`); both default to 0x58. Interrupt on GPIO34. |
+| GreenPAK (Renesas SLG46xxx) | **0x10** programmed, **0x08** blank | [O] `<greenpak_find>` `0x40117444` uses 8-bit `0x20` / `0x10` | Power latch, battery-voltage comparator (adjustable Vref), charge enable. The firmware compares and can **reprogram the GreenPAK NVM** (`greenpak_program_nvm`). RIoT+ only. |
+| Accelerometer, MiraMEMS DA213 / DA217 / DA260 / MSA301 / MSA311 / MSA321 | **0x26** | [O] `<accelerometer_init>` `0x400ff590` uses 8-bit `0x4c`; soft-reset reg `0x00` ← `0x24` | Model found at runtime. Used for single-tap detection ("top button tap"). |
+| Wireless-power IC | **0x60** | [O] `<wireless_power_find>` `0x401dffe8` uses 8-bit `0xC0` | Has status, temperature and output-voltage set. [I] RIoT+ only. |
+| Display MCU (I2C side) | **0x70** | [O] `<GPIO_Clock_IIC_shutdown>` `0x401380f4` writes `0x20` to 8-bit `0xE0` | Only used for shutdown. Display data goes over UART (below). |
+
+## GPIO expander lines
+
+`set_level(dev, pin, level)`. The level enum is 0 = INPUT (error), 1 = LOW, 2 = HIGH. Callers pass `on + 1`, so
+"on" means drive the pin high. The pin → bit table at `0x3f4a8c9e` is the identity (pin *n* = bit *n* of the 16-bit
+`P1:P0` word).
+
+| Logical pin | Function | Evidence |
+|---|---|---|
+| 0 | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0` |
+| 1 | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
+| 2 | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`) |
+| 9 (P1_1) | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78` |
+| config index 0x3b | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O] `<_enable_id_out>` `0x40139028` |
+
+Pin config table copied by `gpioe_init_device` from `0x3f4a8b4c`: entries 0–3 and 9 = 1, the rest 0.
+
+### Buttons
+
+`0x40139bb8` [O]. It only runs when the expander is at 0x58. It builds a button bitmask from the expander's input
+byte (cached at `0x3ffd8843`, updated by `<hal_i2c_rx_callback>` `0x40138fdc` from the expander interrupt):
+
+| Mask bit | Source | Active |
+|---|---|---|
+| 0 | expander input bit 0 | low |
+| 2 | expander input bit 1 | low |
+| 4 | expander input bit 2 | low |
+| 1 | expander input bit 3 | low |
+| 3 | expander input bit 4 | low |
+| 6 | **GPIO33** ("TOUCH") | high |
+| 5 | **GPIO36** ("CONNECT") | low |
+
+⚠ The expander *input* bits 0–4 overlap the *output* pins 0–2 listed above. One of the two readings is wrong
+(maybe a different register or port, or the AW9110B pin numbering). See
+[open-questions.md](open-questions.md#1-expander-pin-overlap).
+
+The button task (`butt_task_main` `0x401372b4`) handles single taps, tap counts, long press → shutdown, the
+nightlight button and the "swap" button.
+
+## Direct GPIOs (summary)
+
+| GPIO | Use | Tag |
+|---|---|---|
+| 0 | I2C0 SDA (also a strapping pin) | [O] |
+| 2 | SD D0 | [O] |
+| 4 | LED PWM ch3 | [O] |
+| 5 | LED PWM ch0 | [O] |
+| 13 | I2C1 SDA (RIoT+) / variant sense | [O] |
+| 14 | SD CLK | [O] |
+| 15 | SD CMD | [O] |
+| 18 | LED PWM ch1 | [O] |
+| 19 | LED PWM ch2 | [O] |
+| 21 | I2S DOUT | [O] |
+| 22 | I2C0 SCL | [O] |
+| 23 | I2C1 SCL (RIoT+) / variant sense | [O] |
+| 25 | I2S WS/LRCLK | [O] |
+| 26 | I2S BCLK | [O] |
+| 27 | UART1 TX → display MCU | [O] |
+| 32 | variant sense | [O] |
+| 33 | TOUCH input (touch controller output) | [O] |
+| 34 | GPIO-expander interrupt (input-only) | [O] `gpioe_config_interrupt` → `0x401c518c` with pin `0x22` |
+| 35 | ADC1_CH7: hardware-ID voltage (RIoT) | [O] |
+| 36 | CONNECT input (input-only); ADC1_CH0 sampled by the ULP | [O] |
+| 39 | ADC1_CH3: battery / supply voltage (RIoT+) | [O] |
+
+## Night-light LEDs (LEDC)
+
+`<LED_task_main>` `0x4013af30` [O]. Configs are static structs in DRAM.
+
+- **Timer** (`0x3ffbf6e0`): high-speed mode, timer 0, **12-bit** resolution, **19 500 Hz** (`0x4c2c`).
+- **Channels** (`0x3ffbf650` + n×0x24):
+
+| LEDC ch | GPIO | Duty scaling (16-bit input → 12-bit duty) | Effective max |
+|---|---|---|---|
+| 0 | **GPIO5** | `v >> 5` | 50 % |
+| 1 | **GPIO18** | `(v * 3) >> 7` | 37.5 % |
+| 2 | **GPIO19** | `v >> 6` | 25 % |
+| 3 | **GPIO4** | `v >> 6` | 25 % |
+
+The scaling is in `0x4013a330`. It is bypassed when the hardware-info byte equals 5. Channels are faded with
+`ledc_set_fade_with_time`.
+
+[I] Channel order is **R, G, B, W**. The LED message's four u16 fields go to ch0..ch3 in order, and the routine
+JSON uses `{"r","g","b","w"}` in that order. Not physically confirmed.
+
+The LED driver also needs the expander **LED enable** line (logical pin 0) set high.
+
+RIoT (hw type 1) also sets up LEDC from stack-built configs in `hal_check_riot_hardware` (`0x40139606`). Those were
+not decoded; check whether they override the table above on RIoT.
+
+## Audio (I2S)
+
+`_install` `0x40104f6c` (`audio_driver_i2s.c`) [O]. Uses the IDF 5 `i2s_std` driver, TX only:
+
+| Field | Value |
+|---|---|
+| Sample rate | runtime (`0x3ffbe7cc`), from the file being played |
+| Clock source | default (PLL_F160M) |
+| MCLK multiple | 256 |
+| Data bit width | 16 |
+| Slot mode | runtime channel count (`0x3ffbe7c8`); mono → slot mask RIGHT (2), stereo → BOTH (3) |
+| WS width | 16, Philips (bit_shift = 1) |
+| **MCLK** | −1 (unused) |
+| **BCLK** | **GPIO26** |
+| **WS** | **GPIO25** |
+| **DOUT** | **GPIO21** |
+| DIN | −1 |
+
+[I] There is no MCLK and no codec register setup, so this is a digital-input class-D amp (MAX98357A-style).
+`AUD_Codec` / `AUD_SDEC` are ESP-ADF *software* decoders (WAV, MP3). The amp is powered via expander logical pin 2.
+
+Sounds play from the SD card (`/mnt`). Files are downloaded from `images.hatchbaby.com` / `assets.ctfassets.net`
+and cached by path (`audio_filepath_cache`).
+
+## SD card
+
+`<hatch_sd_init>` `0x4010e6a4` [O]:
+
+- SDMMC host, slot config copied from `0x3f4823a4`, bus **width = 1**.
+- Host flags `0x21`, max frequency **40 MHz**.
+- Internal pull-ups enabled on **GPIO14 (CLK), GPIO15 (CMD), GPIO2 (D0)**.
+- Powered via expander logical pin 1, then waits 1 s to stabilise.
+- FAT, mounted at **`/mnt`**.
+
+## Clock display
+
+A separate display MCU on **UART1 TX = GPIO27**. See [display-protocol.md](display-protocol.md).
+
+## ADC / power
+
+- **RIoT:** `adc1_config_width(12 bit)`. Toggles ID_OUT, reads ADC1_CH7 (GPIO35) with ID_OUT off and on, and
+  computes a hardware ID from the two voltages.
+- **RIoT+:** reads ADC1_CH3 (GPIO39), then finds and checks the GreenPAK (bus 0). The power task
+  (`power_task_*`) handles:
+  - battery percentage via the GreenPAK comparator (it moves Vref to bracket the battery voltage);
+  - two charge levels;
+  - external and wireless 5 V detection;
+  - the power button, critical-battery shutdown, and the wireless-power IC.
+- **ULP:** `<init_ulp_program>` `0x40135958` loads a ULP program that samples ADC1_CH0 (GPIO36) for wake. It sets
+  RTC IO on GPIO0, 2, 12 and 15.

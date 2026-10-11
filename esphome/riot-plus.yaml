@@ -1,0 +1,16 @@
+# Extra config for RIoT+ boards. Include it from the main file only after the probe has reported
+# "Board variant: RIoT+":
+#
+#   packages:
+#     riot_plus: !include riot-plus.yaml
+#
+# It adds the second I2C bus (scan only; nothing on it is written). Keep the unit on EXTERNAL POWER.
+# This firmware does not service the GreenPAK power latch or the charger.
+i2c:
+  - id: bus_b
+    sda: GPIO13
+    scl: GPIO23
+    frequency: 100kHz
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+    scan: true
