@@ -15,7 +15,15 @@
 | SD card | skip; stream sounds from Home Assistant or embed short clips | n/a |
 | RIoT+ battery/power | custom GreenPAK + wireless-power handling | **high / risky** |
 
-## Draft YAML (RIoT, untested)
+## Replacement config
+
+**[O, hw]-based, 2026-10-12:** the working config is [`esphome/hatch-rest.yaml`](../esphome/hatch-rest.yaml), built on
+the hardware map confirmed with the probe. It uses three local components: `hatch_expander` (the 0x58 expander as
+ESPHome GPIO pins, stock pin model only), `hatch_display` (clock) and `hatch_status_led` (Wi-Fi / lock LEDs). Not
+yet covered: accelerometer "upright" gating of the status LEDs, the bottom button's Bluetooth-setup hold, sounds from
+the SD card, and RIoT+.
+
+## Original draft YAML (superseded)
 
 ```yaml
 esphome:

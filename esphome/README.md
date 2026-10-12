@@ -5,9 +5,13 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-riot-probe.yaml` | main config |
+| `hatch-rest.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker, buttons, touch, clock, status LEDs, toddler lock |
+| `hatch-riot-probe.yaml` | probe (diagnostic) config |
 | `riot-plus.yaml` | adds I2C bus 1 (scan only) for RIoT+ boards |
 | `components/riot_probe/` | local external component: variant detect, expander polling, guarded writes, register dumps |
+| `components/hatch_expander/` | GPIO expander at 0x58 as ESPHome pins (stock AW9110B pin model, INT-driven reads, spaced/retried writes) |
+| `components/hatch_display/` | clock display over UART1 (stock font, colon, inverted brightness) |
+| `components/hatch_status_led/` | Wi-Fi / lock bicolour status LEDs (off / green / red / amber, driven like stock) |
 | `secrets.yaml.example` | copy to `secrets.yaml` |
 
 ## Build
