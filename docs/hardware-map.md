@@ -319,13 +319,14 @@ sense:
 | LEDC (low-speed) ch | GPIO | Initial duty | Driven by | **[O, hw]** LED |
 |---|---|---|---|---|
 | 0 | **GPIO23** | 0x800 | not traced | **red**, lights **both** windows |
-| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` | **Wi-Fi** icon window |
+| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` | **green**, **Wi-Fi** icon window |
 | 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` | **green**, **lock** icon window |
 
 **[O, hw] 2026-10-12:** three LEDs behind two icon windows on the case: a **Wi-Fi** icon and a **lock** icon (the
 toddler lock, which disables the hardware buttons). All three are active-high (lit when driven). GPIO23 is a red
-LED shared by both windows (it may be one LED under both, or two in parallel); GPIO13 lights the Wi-Fi window;
-GPIO32 lights the lock window green. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
+LED shared by both windows (it may be one LED under both, or two in parallel); GPIO13 lights the Wi-Fi window
+green; GPIO32 lights the lock window green. So each window is a red/green pair: its own green plus the shared
+red. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
 firmware shows Wi-Fi and lock status only while the unit is not upright.
 
 Indicator state → `ledc_set_duty_with_hpoint` (duty, hpoint): 0 → (`*0x40110d28`, 0), 1 → (0x1000, 0),
