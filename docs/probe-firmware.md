@@ -94,10 +94,14 @@ Expander inputs initial P1:P0 = 00 00
 WiFi Connected  IP 192.168.20.20  RSSI -51 dB
 ```
 
-Confirmed: variant detect, I2C0 pins/expander, AW9523B identity, Wi-Fi/OTA path. Still open from this boot:
-the identity of **0x27** (accel at SA0-high, or the ALS — [open-questions.md #5/#6](open-questions.md)), the
-button-press → input-bit map ([#1](open-questions.md#1-expander-pin-overlap)), and everything from step 3 on
-(display, LEDs, audio, touch).
+Confirmed: variant detect, I2C0 pins/expander, AW9523B identity, Wi-Fi/OTA path. A later OTA-triggered dump of
+**0x27** read part ID `0x13` = **MSA301/DA213 accelerometer** (resolves [#6](open-questions.md); 0x27 is the accel,
+not the ALS). Still open: the button-press → input-bit map ([#1](open-questions.md#1-expander-pin-overlap)) and
+everything from step 3 on (display, LEDs, audio, touch).
+
+**Bus health note:** on a later boot the I2C bus came up wedged (`Recovery: failed, SCL is held low`) after a
+brownout, giving scattered `--` in dumps. A full power-cycle (not just EN) clears the stuck device. Power the
+board from a supply that can handle the ESP32+PSRAM+radio current spikes to avoid the brownout in the first place.
 
 ### 3. Display (UART only)
 

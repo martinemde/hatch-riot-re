@@ -38,15 +38,18 @@ try ODD, then NONE.
 The firmware publishes ALS data to AWS IoT, but the sensor (I2C chip, or ADC through the ULP) was not found.
 **Resolve:** I2C scan, and trace `als_data_send.c` callers.
 
-**Partial [O, hw]:** the bus-0 scan found an unexplained device at **0x27** (alongside the expander at 0x58). It
-is either the accelerometer (predicted 0x26 — see #6) or this ALS. Dump 0x27's ID register to tell them apart.
+**[O, hw]:** the one unexplained bus-0 device at **0x27** turned out to be the **accelerometer** (part ID `0x13`,
+see #6), *not* the ALS. So there is no separate ALS I2C chip on this RIoT unit; the published ALS value is most
+likely ADC/ULP-derived or simply absent on this variant. Still to resolve by tracing `als_data_send.c` callers.
 
-## 6. Accelerometer bus — PARTLY RESOLVED
+## 6. Accelerometer bus — RESOLVED
 
 The firmware uses 8-bit `0x4c` → 7-bit **0x26**. **[O, hw]** the bus-0 scan (GPIO0/GPIO22) showed no device at
-0x26, but one at **0x27** — one address higher, as if the part's SA0 address pin is strapped high. So the accel
-is on **bus 0**, most likely at **0x27** on this unit. Still to confirm: dump 0x27 register 0x01 (part ID) and
-match it to one of the MiraMEMS models; rule out that 0x27 is instead the ALS (#5).
+0x26 but one at **0x27** — one address higher, i.e. the part's address pin is strapped high on this unit. A probe
+register dump of 0x27 read **reg 0x01 (part ID) = `0x13`**, the WHO_AM_I of the **MiraMEMS MSA301 / DA213 (MSA3xx)
+family** — one of the models `accelerometer_init` supports. So the accelerometer is on **bus 0 at 0x27** on this
+unit. (Output regs 0x02–0x07 read 0/`--`: the probe does not put it into active sampling, and the bus was flaky
+from an earlier brownout, but the ID is unambiguous.)
 
 ## 7. RIoT+ power latch
 
