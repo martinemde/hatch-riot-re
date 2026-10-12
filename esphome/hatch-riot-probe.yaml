@@ -7,8 +7,8 @@
 #     is on, the chip ID reads 0x23, and the pin hasn't been seen acting as an input. P0_6, P0_7 and
 #     P1_4-P1_7 are never driven (stock never changes them; releasing P0_6 wedged the bus).
 #     Every write auto-reverts to the boot snapshot after 30 s.
-#   * GreenPAK (0x08/0x10), wireless-power IC (0x60), display MCU I2C (0x70) and the accelerometer are
-#     never written. The accelerometer is only read.
+#   * GreenPAK (0x08/0x10), wireless-power IC (0x60) and display MCU I2C (0x70) are never written. The
+#     accelerometer is written only by "Accel: stock setup" (the stock DA213 reset + 3 config registers).
 #   * No deep sleep, no ULP, no battery/charge control. Run RIoT+ units on EXTERNAL POWER.
 #   * LED channels are capped at the stock firmware's own limits.
 #
@@ -336,6 +336,13 @@ button:
     on_press:
       - lambda: id(probe).drive_pin(5, true);
 
+  # Accelerometer: the stock DA213 setup (soft reset + 3 config registers) is the only write; then X/Y/Z
+  # are read once a second.
+  - platform: template
+    name: "Accel: stock setup + start reading"
+    on_press:
+      - lambda: id(probe).accel_setup();
+
   # SD card (read only: card init + ID registers, no filesystem, no data I/O)
   - platform: template
     name: "SD: probe card (read-only)"
@@ -444,6 +451,16 @@ text_sensor:
     id: ts_exp_seen
     name: "Expander bits seen toggling"
     update_interval: never
+  - platform: template
+    name: "Accelerometer XYZ (g)"
+    update_interval: 1s
+    lambda: |-
+      if (!id(probe).accel_ready()) return {"not set up"};
+      char buf[48];
+      snprintf(buf, sizeof(buf), "%+.2f %+.2f %+.2f%s", id(probe).accel_axis(0) / 4096.0f,
+               id(probe).accel_axis(1) / 4096.0f, id(probe).accel_axis(2) / 4096.0f,
+               id(probe).accel_upright() ? " (upright)" : "");
+      return {buf};
   - platform: version
     name: "ESPHome version"
 

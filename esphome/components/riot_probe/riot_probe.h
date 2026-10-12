@@ -56,6 +56,14 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Restore OUT/CFG/GCR registers to the values read at boot.
   void restore();
 
+  // --- Accelerometer (DA213 @0x27) ---
+  // Apply the stock DA213 setup (the probe's only accelerometer writes), then log X/Y/Z once a second.
+  void accel_setup();
+  bool accel_ready() const { return this->accel_ready_; }
+  int16_t accel_axis(int i) const { return this->accel_[i]; }
+  // Stock "is upright": Z < -0x7FF counts (about -0.5 g).
+  bool accel_upright() const { return this->accel_[2] < -0x7FF; }
+
   // --- SD card (read only) ---
   // Initialise the card on the stock slot (SDMMC slot 1, 1-bit: CLK 14, CMD 15, D0 2, internal pull-ups) and log
   // its ID/size. Reads card registers only: no filesystem mount, no data reads or writes. Needs SD power
@@ -72,6 +80,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   bool read_reg_(uint8_t reg, uint8_t *value);
   // Block until the post-write quiet period has passed.
   void settle_();
+  void accel_read_();
   // I2C health counters for expander traffic, logged every 30 s.
   void count_(bool write, i2c::ErrorCode err);
   void log_i2c_stats_();
@@ -83,6 +92,8 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint32_t total_ops_{0};
   uint32_t total_errors_{0};
   bool buttons_at_boot_{false};
+  bool accel_ready_{false};
+  int16_t accel_[3]{0, 0, 0};
 
   uint32_t poll_interval_{50};
   uint32_t fallback_interval_{1000};  // idle read rate when GPIO34 INT is high

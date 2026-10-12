@@ -75,7 +75,7 @@ The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed h
 |---|---|---|---|
 | GPIO expander, Awinic (**AW9110B driver**; chip possibly AW9523B) | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0`; **[O, hw]** probe read ID reg `0x10` = `0x23` | **[O, Ghidra]** the stock firmware drives it with the **AW9110B** driver (`gpioe_init_device(0)` leaves type = 0 → `gpioe_aw9110b_config_pins`, 10 pins). ID `0x23` is AW9523B's ID, but the AW9110B may report the same — chip identity unconfirmed (mark on the package would settle it). Register layout 0x00–0x07/0x11 is compatible either way. Interrupt on GPIO34. Boot snapshot `OUT=0000 CFG=0000 GCR=00`. |
 | GreenPAK (Renesas SLG46xxx) | **0x10** programmed, **0x08** blank | [O] `<greenpak_find>` `0x40117444` uses 8-bit `0x20` / `0x10` | Power latch, battery-voltage comparator (adjustable Vref), charge enable. The firmware compares and can **reprogram the GreenPAK NVM** (`greenpak_program_nvm`). RIoT+ only. |
-| Accelerometer, MiraMEMS **MSA301 / DA213** (MSA3xx family) | firmware **0x26**; **0x27 on this unit** | [O] `<accelerometer_init>` `0x400ff590` uses 8-bit `0x4c` (→ 7-bit 0x26); soft-reset reg `0x00` ← `0x24`. **[O, hw]** probe dump of 0x27 read **reg 0x01 (part ID) = `0x13`** = MSA301/DA213 WHO_AM_I. | On bus 0 at **0x27** (address pin strapped high vs. the firmware's nominal 0x26). Used for single-tap detection ("top button tap"). See [open-questions.md #6](open-questions.md). |
+| Accelerometer, MiraMEMS **DA213** (ID `0x13`) | **0x27** (firmware tries 0x26, 0x27, 0x62) | [O] `<accelerometer_init>` `0x400ff590`: soft reset `0x00 ← 0x24`; at 0x27 → `accelerometer_da213_setup` `0x400ffac0` writes `0x0F–0x11 = 00 03 06`. **[O, hw]** ID `0x13`; stock setup + axis reads work (below). | **Orientation only**: the DA213 driver has no tap support; tap detection exists only for the 0x26 parts. See [Accelerometer](#accelerometer-da213) and [open-questions.md #6](open-questions.md). |
 | Wireless-power IC | **0x60** | [O] `<wireless_power_find>` `0x401dffe8` uses 8-bit `0xC0` | Has status, temperature and output-voltage set. [I] RIoT+ only. |
 | Display MCU (I2C side) | **0x70** | [O] `<GPIO_Clock_IIC_shutdown>` `0x401380f4` writes `0x20` to 8-bit `0xE0` | Only used for shutdown. Display data goes over UART (below). |
 
@@ -257,6 +257,23 @@ and cached by path (`audio_filepath_cache`).
 respond (`ESP_ERR_INVALID_RESPONSE` after 4 ms). With P1_1 **high** (~18 s settle) init succeeds in 210 ms:
 **SDHC/SDXC, CID name `SS16G`, 15193 MB (16 GB)**, OCR `0xC0FF8000`, 20 MHz. Switching P1_1 on caused no expander
 NACKs.
+
+## Accelerometer (DA213)
+
+Read: 6 bytes from reg `0x02` (X, Y, Z little-endian int16), each `/ 4` → 14-bit counts, **4096 counts = 1 g**
+(±2 g) [O] `0x400ffa50`. "Is upright" [O] `0x400ffb1c`: **Z < −0x7FF** (≈ −0.5 g).
+
+**[O, hw] 2026-10-12** (probe ran the stock setup, then read once a second while the unit was turned):
+
+| Position | X | Y | Z | Stock "upright" |
+|---|---|---|---|---|
+| Sitting normally | 0.0 | −0.05 | **−1.02 g** | yes |
+| On one side / the other | **−1.0** / **+1.0** | ~−0.3 | ~0 | no |
+| Upside down | 0.0 | −0.1 | **+1.0 g** | no |
+| Tilted face-forward / face-back | ~0 | **+0.9** / **−1.05** | ~0 | no |
+
+So Z points up out of the base, and "upright" means sitting normally (any tilt past ~60° clears it). Who consumes
+`accelerometer_is_device_upright` (2 callers) was not traced.
 
 ## Clock display
 

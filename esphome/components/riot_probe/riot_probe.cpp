@@ -17,6 +17,7 @@ static const char *const TAG = "riot_probe";
 
 // Only this address may ever be written, and only these registers.
 static const uint8_t EXPANDER_ADDR = 0x58;
+static const uint8_t ACCEL_ADDR = 0x27;  // DA213 on this unit (stock tries 0x26, 0x27, 0x62)
 static const uint8_t AW9523B_ID = 0x23;
 static const uint8_t REG_IN0 = 0x00, REG_IN1 = 0x01, REG_OUT0 = 0x02, REG_OUT1 = 0x03, REG_CFG0 = 0x04,
                      REG_CFG1 = 0x05, REG_ID = 0x10, REG_GCR = 0x11;
@@ -59,6 +60,10 @@ void RiotProbe::setup() {
   this->detect_variant_();
   // Wait until every bus is up before the first I2C access.
   this->ready_at_ = millis() + 2000;
+  this->set_interval("accel", 1000, [this]() {
+    if (this->accel_ready_)
+      this->accel_read_();
+  });
   // Polling read failures are otherwise silent; log expander I2C error counts so the bus health is visible.
   this->set_interval("i2c_stats", 30000, [this]() { this->log_i2c_stats_(); });
 }
@@ -289,6 +294,43 @@ void RiotProbe::dump(uint8_t address, uint8_t start, uint8_t count) {
     ESP_LOGI(TAG, "  %02X: %s", base, line);
   }
   this->set_i2c_address(saved);
+}
+
+void RiotProbe::accel_setup() {
+  // The stock DA213 path (accelerometer_init 0x400ff590 + accelerometer_da213_setup 0x400ffac0), used when the
+  // part answers at 0x27: soft reset, then RANGE/ODR/POWER = 00 03 06. These are the only accelerometer writes.
+  uint8_t saved = this->address_;
+  this->set_i2c_address(ACCEL_ADDR);
+  this->settle_();
+  uint8_t reset = 0x24;
+  i2c::ErrorCode e1 = this->write_register(0x00, &reset, 1);
+  delay(10);
+  static const uint8_t CFG[3] = {0x00, 0x03, 0x06};
+  i2c::ErrorCode e2 = this->write_register(0x0F, CFG, 3);
+  this->set_i2c_address(saved);
+  this->accel_ready_ = e1 == i2c::ERROR_OK && e2 == i2c::ERROR_OK;
+  ESP_LOGW(TAG, "Accel 0x27: stock DA213 setup (reset, 0x0F-0x11 = 00 03 06): %s (i2c %d/%d)",
+           this->accel_ready_ ? "ok" : "FAILED", (int) e1, (int) e2);
+}
+
+void RiotProbe::accel_read_() {
+  uint8_t saved = this->address_;
+  this->set_i2c_address(ACCEL_ADDR);
+  this->settle_();
+  uint8_t raw[6];
+  i2c::ErrorCode err = this->read_register(0x02, raw, sizeof(raw));
+  this->set_i2c_address(saved);
+  if (err != i2c::ERROR_OK) {
+    ESP_LOGW(TAG, "Accel read failed (i2c %d)", (int) err);
+    return;
+  }
+  // Stock (0x400ffa50): little-endian int16 per axis, divided by 4 → 14-bit counts; 4096 counts = 1 g at +-2 g.
+  for (int i = 0; i < 3; i++)
+    this->accel_[i] = int16_t(raw[2 * i] | (raw[2 * i + 1] << 8)) / 4;
+  // Stock "is upright" (0x400ffb1c): Z < -0x7FF.
+  ESP_LOGI(TAG, "Accel X=%+.2f g Y=%+.2f g Z=%+.2f g (counts %d %d %d) upright=%s", this->accel_[0] / 4096.0f,
+           this->accel_[1] / 4096.0f, this->accel_[2] / 4096.0f, this->accel_[0], this->accel_[1], this->accel_[2],
+           YESNO(this->accel_upright()));
 }
 
 void RiotProbe::dump_expander() {

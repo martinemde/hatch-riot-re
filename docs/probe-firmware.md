@@ -19,6 +19,7 @@ features. Its job is to confirm or disprove each item in [hardware-map.md](hardw
 | Loud audio / speaker damage | RTTTL beeps only, at 25 % gain, and only on button press. |
 | RIoT+ battery behaviour | No power-latch, charger or deep-sleep code. **Keep RIoT+ units on external power** for the whole session. The second I2C bus is only added via `riot-plus.yaml`, scan only. |
 | Display MCU | UART frames only; it is never written over I2C. |
+| Accelerometer (0x27) | Written only by "Accel: stock setup + start reading": the stock DA213 soft reset and 3 config registers (`0x0F–0x11 = 00 03 06`). Then read-only X/Y/Z once a second. |
 | Unauthenticated re-flash over the network | API and OTA both use the encryption key from `secrets.yaml`; web-UI firmware upload is disabled (`web_server: ota: false`). |
 
 ## Prerequisites
@@ -161,6 +162,8 @@ step 5 first and retry within the 30 s window. Record the colour of each channel
 7. SD power: "Hypothesis: SD power = P1_1 high", wait ≥1 s, then "SD: probe card (read-only)". It initialises the
    card on the stock slot and logs its type/name/size — card registers only, no filesystem mount and no data I/O.
    Without SD power it logs `SD: no card response`.
+8. Accelerometer: "Accel: stock setup + start reading", then watch "Accelerometer XYZ (g)" while turning the unit.
+   "(upright)" = the stock test (Z < −0.5 g), i.e. sitting normally.
 
 If a "Hypothesis" button is refused because the pin was seen toggling as an input, that alone answers open
 question 1: the pin is a button, not an enable line.

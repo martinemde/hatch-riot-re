@@ -69,6 +69,12 @@ family** — one of the models `accelerometer_init` supports. So the acceleromet
 unit. (Output regs 0x02–0x07 read 0/`--`: the probe does not put it into active sampling, and the bus was flaky
 from an earlier brownout, but the ID is unambiguous.)
 
+**[O, Ghidra] 2026-10-12 correction:** `accelerometer_init` tries **0x26, 0x27 and 0x62** in turn (list at
+`0x3f430d38`: `4c 4e c4`), so 0x27 is expected, not a strap surprise. The address picks the driver: 0x26 →
+MSA301/DA217/DA260 (by probing regs 0x34/0x40), 0x62 → MSA311/MSA321, **0x27 → DA213**. The DA213 driver table
+(`0x3f445a10`) has only setup, read-axes and "is upright" — **no tap/interrupt functions**, so this unit does no
+tap detection. See [hardware-map.md](hardware-map.md#i2c-devices) for the hardware check.
+
 ## 7. RIoT+ power latch
 
 The GreenPAK appears to hold the power latch and gate charging. Without matching handling, the unit could switch
