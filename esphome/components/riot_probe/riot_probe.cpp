@@ -3,6 +3,7 @@
 #include <cinttypes>
 
 #include <driver/gpio.h>
+#include <driver/ledc.h>
 #include <driver/sdmmc_host.h>
 #include <sdmmc_cmd.h>
 
@@ -17,7 +18,8 @@ static const char *const TAG = "riot_probe";
 
 // Only this address may ever be written, and only these registers.
 static const uint8_t EXPANDER_ADDR = 0x58;
-static const uint8_t ACCEL_ADDR = 0x27;  // DA213 on this unit (stock tries 0x26, 0x27, 0x62)
+static const uint8_t ACCEL_ADDR = 0x27;
+static const uint32_t STATUS_HALF = 0x800, STATUS_FULL = 0x1000;  // 12-bit LEDC duty (stock *0x40110d28 = 0x800)  // DA213 on this unit (stock tries 0x26, 0x27, 0x62)
 static const uint8_t AW9523B_ID = 0x23;
 static const uint8_t REG_IN0 = 0x00, REG_IN1 = 0x01, REG_OUT0 = 0x02, REG_OUT1 = 0x03, REG_CFG0 = 0x04,
                      REG_CFG1 = 0x05, REG_ID = 0x10, REG_GCR = 0x11;
@@ -331,6 +333,56 @@ void RiotProbe::accel_read_() {
   ESP_LOGI(TAG, "Accel X=%+.2f g Y=%+.2f g Z=%+.2f g (counts %d %d %d) upright=%s", this->accel_[0] / 4096.0f,
            this->accel_[1] / 4096.0f, this->accel_[2] / 4096.0f, this->accel_[0], this->accel_[1], this->accel_[2],
            YESNO(this->accel_upright()));
+}
+
+void RiotProbe::status_leds_setup_() {
+  // Stock hal_check_riot_hardware (RIoT branch): low-speed timer 0, 12-bit, 171 Hz; ch0 GPIO23 (fixed 50 %
+  // reference), ch1 GPIO13 (Wi-Fi), ch2 GPIO32 (lock), all at duty 0x800 = in phase = off. Each window is a red/green
+  // LED anti-parallel between GPIO23 and its pin, so the pin's duty/phase against GPIO23 picks the colour.
+  // ESPHome's own LEDC outputs use the high-speed group, so the low-speed group is free.
+  ledc_timer_config_t timer{};
+  timer.speed_mode = LEDC_LOW_SPEED_MODE;
+  timer.duty_resolution = LEDC_TIMER_12_BIT;
+  timer.timer_num = LEDC_TIMER_0;
+  timer.freq_hz = 171;
+  timer.clk_cfg = LEDC_AUTO_CLK;
+  esp_err_t err = ledc_timer_config(&timer);
+  static const int PINS[3] = {23, 13, 32};
+  for (int ch = 0; ch < 3 && err == ESP_OK; ch++) {
+    ledc_channel_config_t conf{};
+    conf.gpio_num = PINS[ch];
+    conf.speed_mode = LEDC_LOW_SPEED_MODE;
+    conf.channel = static_cast<ledc_channel_t>(ch);
+    conf.timer_sel = LEDC_TIMER_0;
+    conf.duty = STATUS_HALF;
+    conf.hpoint = 0;
+    err = ledc_channel_config(&conf);
+  }
+  this->status_ok_ = err == ESP_OK;
+  ESP_LOGI(TAG, "Status LEDs (GPIO23 ref, GPIO13 Wi-Fi, GPIO32 lock): %s", this->status_ok_ ? "ok" : esp_err_to_name(err));
+}
+
+void RiotProbe::set_status_indicator(uint8_t window, uint8_t state) {
+  // Mirrors stock 0x40139c34: 0 off (in phase), 1 green (100 %), 2 red (0 %), 3 amber (anti-phase 50 %).
+  if (window > 1 || state > 3 || this->variant_ != "RIoT")
+    return;
+  // Set up on first use, after every other component (including ESPHome's own LEDC outputs) has started.
+  if (!this->status_ok_)
+    this->status_leds_setup_();
+  if (!this->status_ok_)
+    return;
+  static const uint32_t DUTY[4] = {STATUS_HALF, STATUS_FULL, 0, STATUS_HALF};
+  static const uint32_t HPOINT[4] = {0, 0, 0, STATUS_HALF};
+  ledc_channel_t ch = window == 0 ? LEDC_CHANNEL_1 : LEDC_CHANNEL_2;
+  ledc_set_duty_with_hpoint(LEDC_LOW_SPEED_MODE, ch, DUTY[state], HPOINT[state]);
+  ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
+  static const char *const NAMES[4] = {"off", "green", "red", "amber"};
+  ESP_LOGI(TAG, "Status %s window -> %s", window == 0 ? "Wi-Fi" : "lock", NAMES[state]);
+  for (int c = 0; c < 3; c++)
+    ESP_LOGI(TAG, "  LS ch%d: duty %" PRIu32 " hpoint %d", c, ledc_get_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t) c),
+             ledc_get_hpoint(LEDC_LOW_SPEED_MODE, (ledc_channel_t) c));
+  ESP_LOGI(TAG, "  LS timer0 freq %" PRIu32 " Hz; GPIO23/13/32 level %d/%d/%d", ledc_get_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0),
+           gpio_get_level(GPIO_NUM_23), gpio_get_level(GPIO_NUM_13), gpio_get_level(GPIO_NUM_32));
 }
 
 void RiotProbe::dump_expander() {

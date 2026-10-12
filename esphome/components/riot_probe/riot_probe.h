@@ -64,6 +64,10 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Stock "is upright": Z < -0x7FF counts (about -0.5 g).
   bool accel_upright() const { return this->accel_[2] < -0x7FF; }
 
+  // --- Status LEDs (RIoT) ---
+  // window 0 = Wi-Fi (GPIO13), 1 = lock (GPIO32); state 0 off, 1 green, 2 red, 3 amber (stock encoding).
+  void set_status_indicator(uint8_t window, uint8_t state);
+
   // --- SD card (read only) ---
   // Initialise the card on the stock slot (SDMMC slot 1, 1-bit: CLK 14, CMD 15, D0 2, internal pull-ups) and log
   // its ID/size. Reads card registers only: no filesystem mount, no data reads or writes. Needs SD power
@@ -81,6 +85,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Block until the post-write quiet period has passed.
   void settle_();
   void accel_read_();
+  void status_leds_setup_();
   // I2C health counters for expander traffic, logged every 30 s.
   void count_(bool write, i2c::ErrorCode err);
   void log_i2c_stats_();
@@ -93,6 +98,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint32_t total_errors_{0};
   bool buttons_at_boot_{false};
   bool accel_ready_{false};
+  bool status_ok_{false};
   int16_t accel_[3]{0, 0, 0};
 
   uint32_t poll_interval_{50};

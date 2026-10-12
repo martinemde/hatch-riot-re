@@ -128,42 +128,8 @@ output:
     pin: GPIO4
     frequency: 19500Hz
     max_power: 25%
-  # Status LEDs (RIoT only: on RIoT+ these pins are I2C1, so drop these before including riot-plus.yaml).
-  # Two red/green bicolour LEDs, each anti-parallel between GPIO23 and GPIO13 (Wi-Fi) / GPIO32 (lock): drive one
-  # side high for red (23) or green (13/32); both at the same duty = off.
-  # Stock: low-speed LEDC, 12-bit, 171 Hz, initial duty 50% (hal_check_riot_hardware). Capped at that 50%.
-  - platform: ledc
-    id: status_gpio23
-    pin: GPIO23
-    frequency: 171Hz
-    max_power: 50%
-  - platform: ledc
-    id: status_gpio13
-    pin: GPIO13
-    frequency: 171Hz
-    max_power: 50%
-  - platform: ledc
-    id: status_gpio32
-    pin: GPIO32
-    frequency: 171Hz
-    max_power: 50%
 
 light:
-  - platform: monochromatic
-    name: "Status LED GPIO23 (common: red in both windows)"
-    output: status_gpio23
-    restore_mode: ALWAYS_OFF
-    default_transition_length: 0s
-  - platform: monochromatic
-    name: "Status LED GPIO13 (Wi-Fi window, green)"
-    output: status_gpio13
-    restore_mode: ALWAYS_OFF
-    default_transition_length: 0s
-  - platform: monochromatic
-    name: "Status LED GPIO32 (lock window, green)"
-    output: status_gpio32
-    restore_mode: ALWAYS_OFF
-    default_transition_length: 0s
   - platform: monochromatic
     name: "LED ch0 GPIO5 (expect red)"
     output: led_ch0
@@ -295,6 +261,27 @@ number:
     initial_value: 0
 
 select:
+  # Status LEDs (RIoT): red/green bicolour LEDs, driven like stock (low-speed LEDC, GPIO23 = 50 % reference).
+  - platform: template
+    name: "Status: Wi-Fi window"
+    options: ["off", "green", "red", "amber"]
+    initial_option: "off"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          static const char *const OPTS[4] = {"off", "green", "red", "amber"};
+          for (uint8_t s = 0; s < 4; s++)
+            if (x == OPTS[s]) id(probe).set_status_indicator(0, s);
+  - platform: template
+    name: "Status: lock window"
+    options: ["off", "green", "red", "amber"]
+    initial_option: "off"
+    optimistic: true
+    set_action:
+      - lambda: |-
+          static const char *const OPTS[4] = {"off", "green", "red", "amber"};
+          for (uint8_t s = 0; s < 4; s++)
+            if (x == OPTS[s]) id(probe).set_status_indicator(1, s);
   - platform: template
     name: "Display UART parity"
     options: ["ODD", "NONE", "EVEN"]

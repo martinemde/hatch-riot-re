@@ -164,6 +164,10 @@ step 5 first and retry within the 30 s window. Record the colour of each channel
    Without SD power it logs `SD: no card response`.
 8. Accelerometer: "Accel: stock setup + start reading", then watch "Accelerometer XYZ (g)" while turning the unit.
    "(upright)" = the stock test (Z < −0.5 g), i.e. sitting normally.
+9. Status LEDs (RIoT): "Status: Wi-Fi window" / "Status: lock window" → off / green / red / amber, driven exactly
+   like stock (see [hardware-map.md](hardware-map.md#status-leds-riot)). The LEDC setup runs on first use: done at
+   boot (before ESPHome's own LEDC outputs started) the duties read back correctly but nothing lit — cause not
+   pinned down.
 
 If a "Hypothesis" button is refused because the pin was seen toggling as an input, that alone answers open
 question 1: the pin is a button, not an enable line.

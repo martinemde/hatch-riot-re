@@ -343,7 +343,9 @@ duty and phase (hpoint) against it, with `*0x40110d28 = 0x800`:
 | 3 | 0x800, 0x800 | anti-phase | **red + green = amber** |
 
 From the status bits (`GPIO_task1_service`): bit *n* alone → red, bit *n+4* alone → green, both → amber, none → off
-(n = 0 Wi-Fi, 2 lock). States 1–3 were inferred from this wiring; only off/red/green were seen directly. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
+(n = 0 Wi-Fi, 2 lock). **[O, hw] 2026-10-12:** the probe reproduces the stock scheme (low-speed LEDC timer 0,
+12-bit, 171 Hz, GPIO23 fixed at 0x800; "Status: Wi-Fi/lock window" selects) and all four states — off, green, red,
+**amber** — work in both windows. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
 firmware shows Wi-Fi and lock status only while the unit is not upright.
 
 Indicator state → `ledc_set_duty_with_hpoint` (duty, hpoint): 0 → (`*0x40110d28`, 0), 1 → (0x1000, 0),
