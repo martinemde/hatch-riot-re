@@ -17,11 +17,41 @@
 
 ## Replacement config
 
-**[O, hw]-based, 2026-10-12:** the working config is [`esphome/hatch-rest.yaml`](../esphome/hatch-rest.yaml), built on
-the hardware map confirmed with the probe. It uses three local components: `hatch_expander` (the 0x58 expander as
-ESPHome GPIO pins, stock pin model only), `hatch_display` (clock) and `hatch_status_led` (Wi-Fi / lock LEDs). Not
-yet covered: accelerometer "upright" gating of the status LEDs, the bottom button's Bluetooth-setup hold, sounds from
-the SD card, and RIoT+.
+**[O, hw] Confirmed on hardware 2026-10-12.** The working config is
+[`esphome/hatch-rest.yaml`](../esphome/hatch-rest.yaml), built on the hardware map confirmed with the probe. Every
+feature below was tested on the teardown unit (RIoT, Hatch Rest 2nd gen):
+
+| Feature | How |
+|---|---|
+| RGBW night light | 4 × high-speed `ledc` (stock power caps) + `light: rgbw`; LED enable P1_0 as a `power_supply` |
+| Speaker | I2S → mono class-D amp; `speaker_source` media player with two sources: **Sendspin** (Music Assistant, discovered over mDNS) and `audio_http` (Home Assistant URLs). Amp enable P1_2 switched on only once the I2S clocks run (avoids a start-up pop), off 2 s after idle |
+| Buttons | volume ±, brightness ±, night light (expander P0_0–P0_4) with local actions; touch top (GPIO33, enable P0_5) and bottom button (GPIO36) exposed to Home Assistant |
+| Toddler lock | template switch that blocks the button actions; lock icon green |
+| Clock | `hatch_display` over UART1, 12 h time from Home Assistant, brightness control |
+| Status LEDs | Wi-Fi icon green / amber / red for HA connected / Wi-Fi only / offline |
+| Test Chime | RTTTL straight to the speaker, for checking the audio path |
+
+Local components:
+
+- **`hatch_expander`** — the 0x58 expander as ESPHome GPIO pins, stock pin model only. Uses its own
+  **bit-banged I2C** on GPIO0/GPIO22 (~50 kHz) instead of ESPHome's `i2c:` bus, which failed on this board (see
+  [hardware-map.md](hardware-map.md#i2c) "Bus reliability"): timeouts on every wait, bus clear at boot / after errors
+  / before reboot, ≥ 5 ms between transactions, read-back-verified writes, inputs accepted only when two reads agree,
+  retry-forever start-up with pin settings replayed. Since the switch: 0 bus errors, and OTA restarts come back
+  without a power cycle.
+- **`hatch_display`** — clock frames, stock font, colon, inverted brightness; sends a brightness frame at start
+  (the display stays dark without one).
+- **`hatch_status_led`** — Wi-Fi / lock bicolour LEDs, off / green / red / amber, configured after the other LEDC
+  outputs.
+
+**Known gaps:**
+
+- Home Assistant TTS / media URLs don't play yet: HA's ffmpeg proxy returned empty (0-byte) FLAC streams, so the
+  player stops right after reading the header. Device side is ready; fix on the HA side (local network URL, ffmpeg
+  proxy errors in the HA log). Music Assistant over Sendspin is unaffected.
+- Status LEDs are always shown (stock shows them only while the unit is tipped over — accelerometer not wired in).
+- Bottom button: no local action (stock: hold > 2 s starts Bluetooth setup).
+- No SD-card sounds; no RIoT+ (battery / GreenPAK power latch) support.
 
 ## Original draft YAML (superseded)
 

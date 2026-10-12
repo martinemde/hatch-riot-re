@@ -38,24 +38,6 @@ external_components:
     components: [hatch_expander, hatch_display, hatch_status_led]
 
 logger:
-  level: VERBOSE
-  logs:
-    # Keep everything else at DEBUG; only the audio path is verbose.
-    component: DEBUG
-    sensor: DEBUG
-    api: DEBUG
-    api.connection: DEBUG
-    wifi: DEBUG
-    hatch_expander: DEBUG
-    hatch_status_led: DEBUG
-    # Temporary, while bringing up audio.
-    speaker_source: VERBOSE
-    sendspin: VERBOSE
-    audio_http: VERBOSE
-    audio: VERBOSE
-    audio_reader: VERBOSE
-    audio_decoder: VERBOSE
-    i2s_audio.speaker: VERBOSE
 
 api:
   encryption:
