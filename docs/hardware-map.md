@@ -291,8 +291,41 @@ Read: 6 bytes from reg `0x02` (X, Y, Z little-endian int16), each `/ 4` → 14-b
 | Upside down | 0.0 | −0.1 | **+1.0 g** | no |
 | Tilted face-forward / face-back | ~0 | **+0.9** / **−1.05** | ~0 | no |
 
-So Z points up out of the base, and "upright" means sitting normally (any tilt past ~60° clears it). Who consumes
-`accelerometer_is_device_upright` (2 callers) was not traced.
+So Z points up out of the base, and "upright" means sitting normally (any tilt past ~60° clears it).
+
+**[O, Ghidra] What uses it:** `hal_call_every_second` reads the axes every second, and the periodic status/clock
+updater `0x4013866c` calls `accelerometer_is_device_upright` and queues a **type-2 message to the segment-display
+queue** (`0x3ffd883c`, handled in `GPIO_task1_service`):
+
+- **upright → status bits = 0** (all indicators off);
+- **not upright → status bits = `0x40134574()`**: bit 0/4 from the connection state (event group + `0x40132a20`),
+  bit 2 when a counter at `+0x3ac` is non-zero, bits 1/5 battery level (RIoT+ only).
+
+`GPIO_task1_service` turns bit pairs (0/4, 1/5, 2/6) into three indicator states 0–3 for `0x40139c34`, which on
+RIoT drives **LEDC low-speed channels 1 and 2** (indicators 0 and 2; indicator 1 is RIoT+-only). So the small
+**status LEDs only show while the unit is tipped over / upside down** — presumably they sit on the bottom, next to
+the bottom (CONNECT) button. In factory-test mode (`0x401198b8`/`0x4011987c` toggle a flag) the same check instead
+sends a type-2 message to the LED task to light one of two colours by orientation.
+
+See [Status LEDs](#status-leds-riot) for the pins. Not checked on hardware.
+
+## Status LEDs (RIoT)
+
+**[O, Ghidra]** `hal_check_riot_hardware` (RIoT branch, `*0x3ffd8844 == 1`) configures a **low-speed LEDC timer 0,
+12-bit, 171 Hz** and three channels from stack-built configs — on the same pins RIoT+ uses for I2C1 and variant
+sense:
+
+| LEDC (low-speed) ch | GPIO | Initial duty | Driven by |
+|---|---|---|---|
+| 0 | **GPIO23** | 0x800 | not traced |
+| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` |
+| 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` |
+
+Indicator state → `ledc_set_duty_with_hpoint` (duty, hpoint): 0 → (`*0x40110d28`, 0), 1 → (0x1000, 0),
+2 → (0, 0), 3 → (`*0x40110d28`, `*0x40110d28`). Polarity and the exact look (on/off/dim/blink) are unconfirmed.
+On RIoT+ the same indicators are instead written as codes `0x17/0x11/0x10` (not traced). Shown only when the unit is
+not upright (see [Accelerometer](#accelerometer-da213)). **Unverified on hardware** — the probe only uses these
+pins as variant-sense inputs at boot.
 
 ## Clock display
 
