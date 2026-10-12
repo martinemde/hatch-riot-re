@@ -7,7 +7,7 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock, status LEDs, toddler lock. Shared base; no `external_components` |
+| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock. Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
@@ -48,7 +48,7 @@ package) and the custom components from this GitHub repo, so the Builder only ho
 3. **Install → Wirelessly.** Updates keep bootloader rollback.
 
 Customise by adding keys after `packages:` — they override the base (for example `substitutions:`, or a `wifi:` block
-with `manual_ip:` for a static address). The file is pinned to release **v1.1**; to update, change the tag in both the
+with `manual_ip:` for a static address). The file is pinned to release **v1.2**; to update, change the tag in both the
 package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to follow every push).
 
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):

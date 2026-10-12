@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 namespace esphome::hatch_display {
@@ -12,6 +13,8 @@ static const char *const TAG = "hatch_display";
 static const uint8_t FRAME_DIGITS = 0x08, FRAME_BRIGHTNESS = 0x18;
 static const uint8_t MISC_COLON = 0x01;
 static const uint8_t SEG_DP = 0x80;
+// Stock waits for TX done plus 10 ticks after every frame; 100 ms covers a 100 Hz tick.
+static const uint32_t FRAME_GAP_MS = 100;
 
 // Stock font, ASCII 0x20..0x7E (firmware table at 0x3f486910).
 static const uint8_t FONT[95] = {
@@ -34,12 +37,43 @@ void HatchDisplay::setup() {
   this->set_brightness(this->brightness_);
 }
 
+void HatchDisplay::loop() {
+  if (!this->digits_dirty_ && !this->brightness_dirty_)
+    return;
+  uint32_t now = millis();
+  if (now - this->last_frame_ms_ < FRAME_GAP_MS)
+    return;
+  // Digits first, so the display is blanked before its first brightness frame lights it at boot.
+  if (this->digits_dirty_) {
+    this->digits_dirty_ = false;
+    uint8_t f[6] = {FRAME_DIGITS, this->segs_[0], this->segs_[1], this->segs_[2], this->segs_[3],
+                    uint8_t(this->misc_ & 0x07)};
+    this->write_array(f, sizeof(f));
+  } else {
+    this->brightness_dirty_ = false;
+    uint8_t f[2] = {FRAME_BRIGHTNESS, BRIGHTNESS[this->brightness_]};
+    this->write_array(f, sizeof(f));
+  }
+  this->flush();
+  this->last_frame_ms_ = millis();
+}
+
 void HatchDisplay::dump_config() {
   ESP_LOGCONFIG(TAG, "Hatch clock display:\n  Brightness level: %u (0 = brightest, 15 = off)", this->brightness_);
   this->check_uart_settings(19200, 1, uart::UART_CONFIG_PARITY_ODD, 8);
 }
 
 void HatchDisplay::print(const std::string &text) {
+  this->set_segs_(text);
+  this->send_digits_();
+}
+
+void HatchDisplay::show_text(const std::string &text) {
+  this->misc_ &= ~MISC_COLON;
+  this->print(text);
+}
+
+void HatchDisplay::set_segs_(const std::string &text) {
   uint8_t segs[4] = {0, 0, 0, 0};
   // Walk backwards so the text is right-aligned and a '.' attaches to the character before it.
   int digit = 3;
@@ -53,7 +87,6 @@ void HatchDisplay::print(const std::string &text) {
     digit--;
   }
   memcpy(this->segs_, segs, sizeof(segs));
-  this->send_digits_();
 }
 
 void HatchDisplay::show_time(int hour, int minute, bool colon) {
@@ -70,14 +103,7 @@ void HatchDisplay::set_colon(bool on) {
 
 void HatchDisplay::set_brightness(uint8_t level) {
   this->brightness_ = level > 15 ? 15 : level;
-  uint8_t f[2] = {FRAME_BRIGHTNESS, BRIGHTNESS[this->brightness_]};
-  this->write_array(f, sizeof(f));
-}
-
-void HatchDisplay::send_digits_() {
-  uint8_t f[6] = {FRAME_DIGITS, this->segs_[0], this->segs_[1], this->segs_[2], this->segs_[3],
-                  uint8_t(this->misc_ & 0x07)};
-  this->write_array(f, sizeof(f));
+  this->brightness_dirty_ = true;
 }
 
 }  // namespace esphome::hatch_display

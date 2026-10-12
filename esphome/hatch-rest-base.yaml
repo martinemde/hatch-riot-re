@@ -22,6 +22,9 @@ esphome:
     - priority: -100
       then:
         - script.execute: update_status_leds
+        # The restored brightness / mode / text don't reach the display on their own at boot.
+        - lambda: id(clock_display).set_brightness(15 - (uint8_t) id(display_brightness).state);
+        - script.execute: update_display
 
 esp32:
   board: esp32dev
@@ -70,11 +73,11 @@ time:
   - platform: homeassistant
     id: ha_time
     on_time_sync:
-      - script.execute: show_clock
+      - script.execute: update_display
     on_time:
       - seconds: 0
         then:
-          - script.execute: show_clock
+          - script.execute: update_display
 
 # ---------------------------------------------------------------- Expander
 # The expander gets the I2C pins to itself (bit-banged, see components/hatch_expander): no `i2c:` bus here. The
@@ -224,6 +227,17 @@ switch:
       - script.execute: update_status_leds
     on_turn_off:
       - script.execute: update_status_leds
+  # Display mode: on = clock, off = the "Display Text" entity.
+  - platform: template
+    id: show_clock
+    name: Show Clock
+    icon: mdi:clock-digital
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: update_display
+    on_turn_off:
+      - script.execute: update_display
 
 # ---------------------------------------------------------------- Buttons
 binary_sensor:
@@ -315,17 +329,32 @@ hatch_display:
 
 number:
   - platform: template
-    name: Clock Brightness
+    id: display_brightness
+    name: Display Brightness
     icon: mdi:brightness-6
-    # 0 = brightest, 15 = off (the display's own scale).
+    # 0 = off, 15 = brightest. The display's own scale runs the other way (0 = brightest), so it is inverted here.
     min_value: 0
     max_value: 15
     step: 1
     optimistic: true
     restore_value: true
-    initial_value: 4
+    initial_value: 11
     set_action:
-      - lambda: id(clock_display).set_brightness((uint8_t) x);
+      - lambda: id(clock_display).set_brightness(15 - (uint8_t) x);
+
+text:
+  # Shown while "Show Clock" is off: up to 4 characters, right-aligned; a '.' lights the previous digit's decimal
+  # point (e.g. "12.5", "HI", "-3.2.1"). Letters use the stock 7-segment font, so some read better than others.
+  - platform: template
+    id: display_text
+    name: Display Text
+    icon: mdi:form-textbox
+    mode: text
+    max_length: 8
+    optimistic: true
+    restore_value: true
+    on_value:
+      - script.execute: update_display
 
 script:
   # Enable the amp only after the I2S speaker is running, so the amp starts with its clocks present.
@@ -342,9 +371,15 @@ script:
                 timeout: 1s
             - delay: 30ms
             - switch.turn_on: amp
-  - id: show_clock
+  # Clock or custom text, per the "Show Clock" switch.
+  - id: update_display
+    mode: queued
     then:
       - lambda: |-
+          if (!id(show_clock).state) {
+            id(clock_display).show_text(id(display_text).state);
+            return;
+          }
           auto t = id(ha_time).now();
           if (!t.is_valid()) return;
           int h = t.hour % 12;

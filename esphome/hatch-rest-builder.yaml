@@ -5,7 +5,7 @@
 # Use the same api_encryption_key the device was last flashed with: it secures both the API and OTA, so the
 # Builder's first wireless install only works if it matches (and Home Assistant keeps its pairing).
 #
-# Both the config and the custom components come from GitHub, pinned to release v1.1. To update, change the tag in
+# Both the config and the custom components come from GitHub, pinned to release v1.2. To update, change the tag in
 # both the package URL (`@<ref>`) and `ref:` below (or use `main` to follow every push).
 #
 # To customise, add keys after `packages:`; they override the base (e.g. substitutions, or a `wifi:` block with
@@ -20,10 +20,10 @@ external_components:
   - source:
       type: git
       url: https://github.com/w1ll1am23/hatch-riot-re
-      ref: v1.1
+      ref: v1.2
       path: esphome/components
     components: [hatch_expander, hatch_display, hatch_status_led]
     refresh: 1d
 
 packages:
-  hatch_rest: github://w1ll1am23/hatch-riot-re/esphome/hatch-rest-base.yaml@v1.1
+  hatch_rest: github://w1ll1am23/hatch-riot-re/esphome/hatch-rest-base.yaml@v1.2
