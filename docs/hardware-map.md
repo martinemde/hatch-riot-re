@@ -73,7 +73,7 @@ The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed h
 
 | Device | 7-bit addr | Evidence | Notes |
 |---|---|---|---|
-| GPIO expander **AW9523B** | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0`; **[O, hw]** probe read ID reg `0x10` = `0x23` = AW9523B | Driver also supports AW9110B (`gpioe_aw9523b_*` / `gpioe_aw9110b_*`), but this unit is **AW9523B**. Interrupt on GPIO34. Boot snapshot `OUT=0000 CFG=0000 GCR=00`, inputs `P1:P0=0000`. |
+| GPIO expander, Awinic (**AW9110B driver**; chip possibly AW9523B) | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0`; **[O, hw]** probe read ID reg `0x10` = `0x23` | **[O, Ghidra]** the stock firmware drives it with the **AW9110B** driver (`gpioe_init_device(0)` leaves type = 0 → `gpioe_aw9110b_config_pins`, 10 pins). ID `0x23` is AW9523B's ID, but the AW9110B may report the same — chip identity unconfirmed (mark on the package would settle it). Register layout 0x00–0x07/0x11 is compatible either way. Interrupt on GPIO34. Boot snapshot `OUT=0000 CFG=0000 GCR=00`. |
 | GreenPAK (Renesas SLG46xxx) | **0x10** programmed, **0x08** blank | [O] `<greenpak_find>` `0x40117444` uses 8-bit `0x20` / `0x10` | Power latch, battery-voltage comparator (adjustable Vref), charge enable. The firmware compares and can **reprogram the GreenPAK NVM** (`greenpak_program_nvm`). RIoT+ only. |
 | Accelerometer, MiraMEMS **MSA301 / DA213** (MSA3xx family) | firmware **0x26**; **0x27 on this unit** | [O] `<accelerometer_init>` `0x400ff590` uses 8-bit `0x4c` (→ 7-bit 0x26); soft-reset reg `0x00` ← `0x24`. **[O, hw]** probe dump of 0x27 read **reg 0x01 (part ID) = `0x13`** = MSA301/DA213 WHO_AM_I. | On bus 0 at **0x27** (address pin strapped high vs. the firmware's nominal 0x26). Used for single-tap detection ("top button tap"). See [open-questions.md #6](open-questions.md). |
 | Wireless-power IC | **0x60** | [O] `<wireless_power_find>` `0x401dffe8` uses 8-bit `0xC0` | Has status, temperature and output-voltage set. [I] RIoT+ only. |
@@ -82,24 +82,34 @@ The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed h
 ## GPIO expander lines
 
 `set_level(dev, pin, level)`. The level enum is 0 = INPUT (error), 1 = LOW, 2 = HIGH. Callers pass `on + 1`, so
-"on" means drive the pin high. The pin → bit table at `0x3f4a8c9e` is the identity (pin *n* = bit *n* of the 16-bit
-`P1:P0` word).
+"on" means drive the pin high.
 
-| Logical pin | Function | Evidence |
-|---|---|---|
-| 0 | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0` |
-| 1 | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
-| 2 | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`) |
-| 9 (P1_1) | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78` |
-| config index 0x3b | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O] `<_enable_id_out>` `0x40139028` |
+**[O, Ghidra] Corrected 2026-10-12.** The driver in use is `gpioe_aw9110b_*` (see the I2C devices table), whose
+pin → bit table is at **`0x3f4a8c18`** (`gpioe_aw9110b_set_level` `0x401c73bc`). The earlier map used the AW9523B
+driver's identity table at `0x3f4a8c9e`, which this firmware never uses. "P0"/"P1" below are register bytes
+0x00/0x02/0x04 and 0x01/0x03/0x05 (the AW9110B's ports A and B):
 
-Pin config table copied by `gpioe_init_device` from `0x3f4a8b4c`: entries 0–3 and 9 = 1, the rest 0.
+| Logical pin | Bit | Function | Evidence |
+|---|---|---|---|
+| 0 | **P1_0** | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0`; **[O, hw]** driving it high lit the ring (ch0 = red) |
+| 1 | **P1_1** | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
+| 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`) |
+| 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back |
+| 4–8 | **P0_0–P0_4** | Buttons (inputs, interrupt enabled) | [O] config table; **[O, hw]** see [Buttons](#buttons) |
+| 9 | **P0_5** | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78` |
+| — | P0_6, P0_7, P1_4–P1_7 | Not part of the AW9110B model; **never changed by stock** | [O, Ghidra] config is read-modify-write, so they keep their power-on state (output, low) |
 
-**[O, hw]** Touch-controller enable on **P1_1 (logical pin 9)** is confirmed drivable: the probe set `OUT1` bit 1
-high and `CFG1` to output with no error. (Whether that actually powers the touch pad — i.e. makes `GPIO33` TOUCH
-respond — was not captured before we moved on; the drive itself works.) The P0_0–P0_3 "enable" entries are
-suspect: P0_0–P0_4 read as the five buttons (see [Buttons](#buttons)), and driving P0_0 high did **not** enable
-the LEDs, so the logical-pin-0..2 = LED/SD/amp mapping does not hold for this board as written.
+Boot config (`gpioe_aw9110b_config_pins` `0x401c70d4`, table `0x3f4a8b4c`: entries 0–3 and 9 = 1 → output, rest
+→ input): CFG `P0 |= 0x1F` (buttons in), P1_0–P1_3 and P0_5 outputs; OUT for those pins low; interrupts enabled on
+the button pins; GCR bit 4 set (port 0 push-pull).
+
+**[O, hw]** Releasing **P0_6** (driving it high in open-drain mode) wedged the I2C bus within ~4 ms on 2026-10-12
+(expander NACKs, then the board hangs until a full power-cycle). Releasing P0_5 for 30 s was harmless. The probe
+now refuses to change P0_6, P0_7 and P1_4–P1_7, and its "button pins to INPUT" switch writes only `CFG0 |= 0x1F`.
+
+Earlier hardware results, reinterpreted: "touch enable on P1_1 confirmed drivable" actually switched **SD power**;
+"driving P0_0 high did not enable the LEDs" drove the volume-up button pin. Neither is evidence against the map
+above.
 
 ### Buttons
 
@@ -116,18 +126,17 @@ byte (cached at `0x3ffd8843`, updated by `<hal_i2c_rx_callback>` `0x40138fdc` fr
 | 6 | **GPIO33** ("TOUCH") | high |
 | 5 | **GPIO36** ("CONNECT") | low |
 
-⚠ The expander *input* bits 0–4 overlap the *output* pins 0–2 listed above. One of the two readings is wrong
-(maybe a different register or port, or the AW9110B pin numbering). See
-[open-questions.md](open-questions.md#1-expander-pin-overlap).
+"Expander input bit 0–4" = P0_0–P0_4 = logical pins 4–8 in the corrected map above, so there is no overlap with
+the enable outputs (which are on P1).
 
 The button task (`butt_task_main` `0x401372b4`) handles single taps, tap counts, long press → shutdown, the
 nightlight button and the "swap" button.
 
-**[O, hw] Confirmed on hardware (probe firmware).** The five front buttons are AW9523B inputs **P0_0–P0_4,
+**[O, hw] Confirmed on hardware (probe firmware).** The five front buttons are expander inputs **P0_0–P0_4,
 active-low** (idle pulled high → `P0 = 0x1F`; each press pulls one bit to 0). They are only readable when the pins
 are put in **input** mode — on this unit they default to *outputs* (reading a constant 0x00), so the stock
-firmware must configure them as inputs before reading. The probe's "all pins to INPUT" action was needed to see
-any press. Physical mapping, by pressing each button one at a time:
+firmware must configure them as inputs before reading (it does: `CFG0 |= 0x1F`). The probe's "button pins to
+INPUT" action does the same. Physical mapping, by pressing each button one at a time:
 
 | Button | Expander bit |
 |---|---|

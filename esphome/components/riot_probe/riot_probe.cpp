@@ -19,6 +19,13 @@ static const uint8_t AW9523B_ID = 0x23;
 static const uint8_t REG_IN0 = 0x00, REG_IN1 = 0x01, REG_OUT0 = 0x02, REG_OUT1 = 0x03, REG_CFG0 = 0x04,
                      REG_CFG1 = 0x05, REG_ID = 0x10, REG_GCR = 0x11;
 static const uint8_t GCR_P0_PUSH_PULL = 0x10;
+// The stock firmware drives this chip with its AW9110B driver (10 pins; pin table 0x3f4a8c18): logical 0-3 =
+// P1_0-P1_3 (LED/SD/amp/ID_OUT enables), 4-8 = P0_0-P0_4 (buttons, inputs), 9 = P0_5 (touch enable). Its config
+// is read-modify-write, so the other six bits keep their power-on state (output, low) forever. Releasing P0_6
+// wedged the bus on hardware, so the probe never changes those bits either.
+static const uint16_t NEVER_DRIVE = 0xF0C0;  // P0_6, P0_7, P1_4-P1_7
+// The stock config makes exactly the five button pins inputs.
+static const uint8_t CFG0_BUTTONS = 0x1F;
 
 // Stock font, ASCII 0x20..0x7E (firmware table at 0x3f486910).
 static const uint8_t FONT[95] = {
@@ -46,6 +53,36 @@ void RiotProbe::setup() {
   this->detect_variant_();
   // Wait until every bus is up before the first I2C access.
   this->ready_at_ = millis() + 2000;
+  // Polling read failures are otherwise silent; log expander I2C error counts so the bus health is visible.
+  this->set_interval("i2c_stats", 30000, [this]() { this->log_i2c_stats_(); });
+}
+
+void RiotProbe::count_(bool write, i2c::ErrorCode err) {
+  (write ? this->win_writes_ : this->win_reads_)++;
+  if (err != i2c::ERROR_OK)
+    this->win_errors_[err < ERR_SLOTS ? err : ERR_SLOTS - 1]++;
+}
+
+void RiotProbe::log_i2c_stats_() {
+  uint32_t errors = 0;
+  for (int i = 0; i < ERR_SLOTS; i++) {
+    errors += this->win_errors_[i];
+    this->total_errors_ += this->win_errors_[i];
+  }
+  this->total_ops_ += this->win_reads_ + this->win_writes_;
+  // Codes: 2 = NACK, 3 = timeout, 6 = unknown (see i2c::ErrorCode).
+  ESP_LOGI(TAG,
+           "I2C stats (30 s): %" PRIu32 " reads, %" PRIu32 " writes, %" PRIu32 " errors [nack=%" PRIu32
+           " timeout=%" PRIu32 " unknown=%" PRIu32 " other=%" PRIu32 "]; since boot %" PRIu32 "/%" PRIu32
+           " failed. Pins at boot: %s",
+           this->win_reads_, this->win_writes_, errors, this->win_errors_[i2c::ERROR_NOT_ACKNOWLEDGED],
+           this->win_errors_[i2c::ERROR_TIMEOUT], this->win_errors_[i2c::ERROR_UNKNOWN],
+           errors - this->win_errors_[i2c::ERROR_NOT_ACKNOWLEDGED] - this->win_errors_[i2c::ERROR_TIMEOUT] -
+               this->win_errors_[i2c::ERROR_UNKNOWN],
+           this->total_errors_, this->total_ops_, this->buttons_at_boot_ ? "buttons INPUT" : "power-on default");
+  this->win_reads_ = this->win_writes_ = 0;
+  for (int i = 0; i < ERR_SLOTS; i++)
+    this->win_errors_[i] = 0;
 }
 
 void RiotProbe::detect_variant_() {
@@ -76,12 +113,17 @@ void RiotProbe::detect_variant_() {
            this->sense_[2], this->variant_.c_str());
 }
 
-bool RiotProbe::read_reg_(uint8_t reg, uint8_t *value) { return this->read_byte(reg, value); }
+bool RiotProbe::read_reg_(uint8_t reg, uint8_t *value) {
+  i2c::ErrorCode err = this->read_register(reg, value, 1);
+  this->count_(false, err);
+  return err == i2c::ERROR_OK;
+}
 
 bool RiotProbe::write_reg_(uint8_t reg, uint8_t value) {
   // Register writes are idempotent, so one retry is safe.
   for (int attempt = 1; attempt <= 2; attempt++) {
     i2c::ErrorCode err = this->write_register(reg, &value, 1);
+    this->count_(true, err);
     if (err == i2c::ERROR_OK)
       return true;
     ESP_LOGW(TAG, "Write expander reg 0x%02X <- 0x%02X failed (attempt %d/2, i2c error %d)", reg, value, attempt,
@@ -107,6 +149,16 @@ bool RiotProbe::snapshot_() {
            this->chip_id_ == AW9523B_ID ? "AW9523B" : "NOT AW9523B, writes disabled", this->snap_out_[1],
            this->snap_out_[0], this->snap_cfg_[1], this->snap_cfg_[0], this->snap_gcr_);
   this->dump_expander();
+  if (this->buttons_at_boot_ && this->chip_id_ == AW9523B_ID) {
+    // Match the stock boot config for the button pins (P0_0-P0_4 inputs) and make it the restore() baseline.
+    uint8_t cfg0 = this->snap_cfg_[0] | CFG0_BUTTONS;
+    if (this->write_reg_(REG_CFG0, cfg0)) {
+      this->snap_cfg_[0] = cfg0;
+      ESP_LOGW(TAG, "buttons_at_boot: P0_0-P0_4 set to INPUT (CFG0=%02X, new restore baseline)", cfg0);
+    } else {
+      ESP_LOGE(TAG, "buttons_at_boot: could not set button pins to INPUT");
+    }
+  }
   return true;
 }
 
@@ -136,6 +188,13 @@ void RiotProbe::loop() {
     if (interval > 2000)
       interval = 2000;
   }
+  // Like stock, read the expander when its INT line (GPIO34, active low, cleared by reading the inputs) says
+  // something changed, instead of polling continuously. Every I2C transaction is a chance to hit a bus glitch
+  // (LED PWM current wedged the bus on hardware), so idle reads drop to a slow fallback. Keep the fast rate while
+  // a debounce candidate is pending or before the first baseline read.
+  bool pending = !this->snapshot_ok_ || !this->have_inputs_ || this->candidate_streak_ > 0;
+  if (!pending && gpio_get_level(GPIO_NUM_34) != 0 && interval < this->fallback_interval_)
+    interval = this->fallback_interval_;
   if (now - this->last_poll_ < interval)
     return;
   this->last_poll_ = now;
@@ -256,6 +315,11 @@ bool RiotProbe::drive_pin(uint8_t pin, bool high) {
     return false;
   }
   uint16_t bit = 1u << pin;
+  if (NEVER_DRIVE & bit) {
+    ESP_LOGE(TAG, "Refusing to drive P%u_%u: the stock firmware never changes it (P0_6 wedged the bus)", pin / 8,
+             pin % 8);
+    return false;
+  }
   if (this->seen_toggling_ & bit) {
     ESP_LOGE(TAG, "Refusing to drive P%u_%u: it has been seen acting as an input", pin / 8, pin % 8);
     return false;
@@ -296,28 +360,28 @@ bool RiotProbe::set_p0_push_pull(bool push_pull) {
   return true;
 }
 
-bool RiotProbe::set_all_inputs(bool on) {
+bool RiotProbe::set_button_inputs(bool on) {
   if (!on) {
     this->restore();
     return true;
   }
-  // Making pins inputs never drives the bus, so this is the safe direction. Still gated behind arm and
-  // auto-reverted like every other write.
+  // Only the five button pins, exactly as the stock config. Releasing other pins (P0_6) wedged the bus.
+  // Still gated behind arm and auto-reverted like every other write.
   if (!this->armed_) {
     ESP_LOGE(TAG, "Write blocked: not armed");
     return false;
   }
-  // Mark modified before writing: if CFG0 lands but CFG1 fails, restore() must still put CFG0 back.
+  // Mark modified before writing so a failed write is still reverted.
   this->cfg_modified_ = true;
-  if (!this->guarded_write_(REG_CFG0, 0xFF) || !this->guarded_write_(REG_CFG1, 0xFF)) {
-    ESP_LOGE(TAG, "Could not switch expander pins to INPUT; reverting");
+  if (!this->guarded_write_(REG_CFG0, this->snap_cfg_[0] | CFG0_BUTTONS)) {
+    ESP_LOGE(TAG, "Could not switch button pins to INPUT; reverting");
     this->restore();
     return false;
   }
   // Re-baseline inputs so pins settling to their idle (pulled) level aren't counted as button activity.
   this->have_inputs_ = false;
   this->set_timeout("revert", this->write_timeout_, [this]() { this->restore(); });
-  ESP_LOGW(TAG, "All expander pins set to INPUT (auto-revert in %" PRIu32 " ms). Press buttons now.",
+  ESP_LOGW(TAG, "Button pins P0_0-P0_4 set to INPUT (auto-revert in %" PRIu32 " ms). Press buttons now.",
            this->write_timeout_);
   return true;
 }
@@ -345,6 +409,8 @@ void RiotProbe::dump_config() {
   LOG_I2C_DEVICE(this);
   ESP_LOGCONFIG(TAG, "  Variant: %s (GPIO13=%u GPIO32=%u GPIO23=%u)", this->variant_.c_str(), this->sense_[0],
                 this->sense_[1], this->sense_[2]);
+  ESP_LOGCONFIG(TAG, "  Reads: on GPIO34 INT low, else every %" PRIu32 " ms", this->fallback_interval_);
+  ESP_LOGCONFIG(TAG, "  Buttons at boot: %s", YESNO(this->buttons_at_boot_));
   ESP_LOGCONFIG(TAG, "  Poll interval: %" PRIu32 " ms, write timeout: %" PRIu32 " ms", this->poll_interval_, this->write_timeout_);
 }
 

@@ -2,7 +2,12 @@
 
 These need a real device, or deeper static work, to settle.
 
-## 1. Expander pin overlap
+## 1. Expander pin overlap — RESOLVED
+
+**[O, Ghidra] 2026-10-12:** there is no overlap. The firmware drives the expander with its **AW9110B** driver, whose
+pin table (`0x3f4a8c18`) puts the enables on **P1_0–P1_3** (LED, SD, amp, ID_OUT) and the buttons on **P0_0–P0_4**
+(logical 4–8), touch enable on **P0_5**. The old map came from the unused AW9523B driver's identity table. See
+[hardware-map.md](hardware-map.md#gpio-expander-lines). History below.
 
 The enable outputs (LED = 0, SD = 1, amp = 2, touch = 9) and the button inputs (expander input bits 0–4) seem to
 share pins 0–2.
@@ -26,12 +31,12 @@ The key to the "overlap": on this unit the expander pins power up as **outputs r
 are invisible until the pins are switched to **input** — which is why direct presses registered nothing and the
 probe's "all pins to INPUT" action was required. So the same P0_0–P0_2 pins the firmware uses as enable *outputs*
 (LED/SD/amp) are the button *input* bits 0–2; the firmware must be multiplexing their direction, or the enable
-lines are elsewhere than inferred. **Still open:** run the enable-side hypotheses (drive P0_0/P0_1/P0_2 high and
-watch the LED/SD/amp) to see whether these pins truly double as enables or the enable mapping was misread.
+lines are elsewhere than inferred. (Answered above: the enable mapping was misread.)
 
 ## 2. RGBW channel order
 
 ch0..ch3 = r, g, b, w is inferred from the data order. **Resolve:** light each channel by itself.
+**[O, hw] partial:** ch0 (GPIO5) = **red** confirmed 2026-10-12 (LED enable P1_0 high). ch1–ch3 still to check.
 
 ## 3. UART parity for the display
 
@@ -84,20 +89,20 @@ flashing it.
 The [teardown](teardown.md) unit is model **HBREST2 = Hatch Rest (2nd gen)**, and it is the plain **"RIoT"**
 variant (main board "RIoT Main V1.5"). So RIoT = Rest 2nd gen; by extension RIoT+ = Rest+ 2nd gen.
 
-## 11. LED driver enable line — NOT FOUND
+## 11. LED driver enable line — RESOLVED: P1_0
 
 **[O, hw]** The four LEDC channels (GPIO5/18/19/4) produce no visible light on their own, so the LED driver needs
 an enable. The RE's guess (expander "logical pin 0" = P0_0) is **wrong**: P0_0 is the volume-up button, and
-driving P0_0 high with a channel on produced nothing. The real enable pin is unidentified.
+driving P0_0 high with a channel on produced nothing. **[O, Ghidra]** with the corrected (AW9110B) pin table,
+logical pin 0 is **P1_0**.
 
-**Resolve:** with one LEDC channel on at ~50 %, arm the probe and drive each remaining expander output high one at
-a time (`Expander test pin` + `Expander: drive test pin`, HIGH) — candidates **P0_5, P0_6, P0_7, P1_0, P1_2–P1_7**
-— watching for the ring to light. It may also need more than one line (e.g. a power rail plus an enable), or a
-pin on the separate LED-ring board rather than the expander.
+**[O, hw] Confirmed 2026-10-12:** with LED ch0 (GPIO5) at ~48 %, driving **P1_0** high lit the ring **red**.
+The OUT1 write reported an I2C timeout/NACK yet took effect, and the board then hung (bus wedged, power-cycle
+needed) — see [probe-firmware.md](probe-firmware.md) bus notes.
 
 ## 12. GPIO33 TOUCH behaviour — PARTIAL
 
-Touching the ring with the controller **not** enabled does nothing (expected). The touch-enable drive (P1_1 high)
-now succeeds (see [hardware-map](hardware-map.md#gpio-expander-lines)), but we did not capture a `GPIO33 TOUCH`
-state change while enabled before moving on. **Resolve:** drive P1_1 high and, within the 30 s window, touch the
-ring and confirm `GPIO33` goes high.
+Touching the ring with the controller **not** enabled does nothing (expected). The earlier "touch-enable" drive
+(P1_1 high) actually switched SD power; with the corrected pin table the touch enable is **P0_5** (logical 9).
+**Resolve:** press "Hypothesis: touch enable = P0_5 high" and, within the 30 s window, touch the ring and confirm
+`GPIO33` goes high.

@@ -16,6 +16,24 @@ the small scripts in `tools/`.
 | `fof.py` | Find the function containing an address |
 | `mem.py` | Read words from constant data (config structs) |
 
+### Ghidra (added 2026-10-12)
+
+Ghidra 12.1.4 decompiles Xtensa out of the box. `tools/img2elf.py` turns the app image into an ELF (segments at
+their load addresses, `xr.py` auto-names as symbols, and with `--rom` the ESP-IDF mask-ROM names), and
+`tools/ghidra/ExportDecomp.java` writes decompiled C for chosen functions from a headless run:
+
+```sh
+python3 -I tools/img2elf.py firmware/riot_*.bin work/riot_7_1_644.elf work/listing.txt.xr \
+    --rom ~/.cache/esphome/idf/frameworks/5.5.5/components/esp_rom/esp32/ld
+GH=~/tools/ghidra_12.1.4_PUBLIC/support/analyzeHeadless
+$GH work/ghidra riot -import work/riot_7_1_644.elf -overwrite                    # once (~1 min)
+$GH work/ghidra riot -process riot_7_1_644.elf -noanalysis -scriptPath tools/ghidra \
+    -postScript ExportDecomp.java work/ghidra/out.c 401c70d4 401c73bc            # no addresses = all
+```
+
+Caveat: Ghidra collapses Xtensa zero-overhead `loop` bodies to a single iteration in pseudocode. Check loop
+contents against data tables or the disassembly. (The REA MCP tools reject Xtensa ELFs.)
+
 ## Xtensa / Capstone gotchas
 
 - Capstone 6 does **not** decode `beqz.n`, `bnez.n` or `nop.n` (and a few other narrow ops). Left alone, this

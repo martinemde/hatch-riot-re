@@ -12,7 +12,8 @@ features. Its job is to confirm or disprove each item in [hardware-map.md](hardw
 | Device is locked (flash encryption / secure boot) | `backup.sh` checks the eFuses and **stops** if either is on. Do not flash in that case. (Checked unit: unlocked — see [open-questions.md #9](open-questions.md).) |
 | Bricking via a wrong strapping state | GPIO0 (I2C SDA) and GPIO5 (LED PWM) are strapping pins, used the same way the stock firmware uses them. Download mode is still available via GPIO0 + EN. |
 | Corrupting the GreenPAK (power/battery logic) | **No code path writes to it.** The firmware's only I2C write path is hard-wired to the expander address 0x58 and registers 0x02–0x05 / 0x11. The I2C scan sends zero-length address probes only. |
-| Writing an unknown chip | Expander writes are refused unless its ID register reads `0x23` (AW9523B). An AW9110B board is read-only. |
+| Writing an unknown chip | Expander writes are refused unless its ID register reads `0x23`. |
+| Releasing pins stock never touches | P0_6, P0_7 and P1_4–P1_7 are never driven (releasing P0_6 wedged the bus). "Button pins to INPUT" writes only `CFG0 |= 0x1F`, exactly the stock config. |
 | Driving an expander pin into a button (short to GND/VCC) | Writes need **"Expander writes armed"** (always off at boot). Any pin seen changing as an input is **permanently refused** for that boot. Writes auto-revert to the boot snapshot after **30 s**, and on disarm. Only one pin changes per action. |
 | Over-driving LEDs | Each LEDC channel's `max_power` equals the stock firmware's own cap (50 / 37.5 / 25 / 25 %). All lights start OFF. |
 | Loud audio / speaker damage | RTTTL beeps only, at 25 % gain, and only on button press. |
@@ -111,6 +112,19 @@ each expander write once and logs the I2C error code, and a half-done INPUT swit
 are in [hardware-map.md](hardware-map.md#buttons): all five confirmed, P0_4 is brightness down (not the
 touch ring). In the last run the first CFG0 write NACKed and the retry succeeded.
 
+**Bus-health experiment.** The probe logs `I2C stats (30 s)` every 30 s: expander reads/writes and errors by
+code (2 = NACK, 3 = timeout, 6 = unknown), plus totals since boot. Polling failures used to be silent.
+
+Baseline with the expander at its power-on default: ~2 errors per ~3,800 reads (≈0.05 %) at idle. A first
+experiment set **all** pins to INPUT at boot; that build hung at boot every time (bootloader rolled it back) until a
+power-cycle. Releasing pins one at a time then isolated it: **P0_5 harmless, P0_6 wedged the bus within ~4 ms**.
+Ghidra then showed the stock firmware uses the AW9110B driver and never changes P0_6/P0_7/P1_4–P1_7 (see
+[hardware-map.md](hardware-map.md#gpio-expander-lines)), so the probe no longer touches them.
+
+`buttons_at_boot: true` under `riot_probe:` (off by default) applies the stock button config (`CFG0 |= 0x1F`) at
+boot **without arming** — the one exception to the "no writes unless armed" rule — and makes it the `restore()`
+baseline, so buttons are readable without arming.
+
 ### 3. Display (UART only)
 
 1. "Display: all segments", then "Display text" `1234`.
@@ -127,9 +141,9 @@ step 5 first and retry within the 30 s window. Record the colour of each channel
 ### 5. Expander outputs (guarded)
 
 1. Turn on **"Expander writes armed"**. Don't press buttons while armed.
-2. Press "Hypothesis: LED enable = P0_0 high", then within 30 s turn on an LED channel.
-3. "Hypothesis: amp enable = P0_2 high", then within 30 s "Audio: short beep".
-4. "Hypothesis: touch enable = P1_1 high", then touch the top and watch GPIO33.
+2. Press "Hypothesis: LED enable = P1_0 high", then within 30 s turn on an LED channel.
+3. "Hypothesis: amp enable = P1_2 high", then within 30 s "Audio: short beep".
+4. "Hypothesis: touch enable = P0_5 high", then touch the top and watch GPIO33.
 5. If a hypothesis fails, try "Expander P0 push-pull (stock mode)" (the stock driver sets it), or step through
    other pins with "Expander test pin" + "Expander: drive test pin".
 6. Turn "Expander writes armed" off when finished. This restores the boot snapshot.

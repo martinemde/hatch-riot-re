@@ -4,7 +4,8 @@
 #   * Passive by default. Nothing is driven at boot except the bus/peripheral pins the stock firmware
 #     itself drives (I2C, LEDC, I2S, display UART TX). All lights and sound start OFF.
 #   * The ONLY I2C writes possible are to the GPIO expander (0x58), and only when "Expander writes armed"
-#     is on, the chip identifies as AW9523B, and the pin hasn't been seen acting as an input.
+#     is on, the chip ID reads 0x23, and the pin hasn't been seen acting as an input. P0_6, P0_7 and
+#     P1_4-P1_7 are never driven (stock never changes them; releasing P0_6 wedged the bus).
 #     Every write auto-reverts to the boot snapshot after 30 s.
 #   * GreenPAK (0x08/0x10), wireless-power IC (0x60), display MCU I2C (0x70) and the accelerometer are
 #     never written. The accelerometer is only read.
@@ -84,8 +85,8 @@ i2c:
       number: GPIO0
       ignore_strapping_warning: true
     scl: GPIO22
-    # Stock uses 400 kHz. 100 kHz is gentler and enough for probing.
-    frequency: 100kHz
+    # Stock uses 400 kHz. 100 kHz made each transaction 4x longer, i.e. more exposed to LED-PWM glitches.
+    frequency: 400kHz
     # Stock disables the internal pull-ups (external pull-ups on the board). If the scan finds nothing,
     # set these to true and retry.
     sda_pullup_enabled: false
@@ -99,6 +100,8 @@ riot_probe:
   address: 0x58
   poll_interval: 50ms
   write_timeout: 30s
+  # Button pins P0_0-P0_4 to INPUT at boot, as stock does (see docs/probe-firmware.md). Default false.
+  buttons_at_boot: false
 
 # ---------------------------------------------------------------- Night-light LEDs
 # One light per channel so the colour order can be confirmed. max_power = stock caps (0x4013a330).
@@ -298,13 +301,13 @@ switch:
     turn_off_action:
       - lambda: id(probe).restore();
   - platform: template
-    name: "Expander: all pins to INPUT (map buttons)"
+    name: "Expander: button pins to INPUT (map buttons)"
     restore_mode: ALWAYS_OFF
     lambda: return id(probe).inputs_mode();
     turn_on_action:
-      - lambda: id(probe).set_all_inputs(true);
+      - lambda: id(probe).set_button_inputs(true);
     turn_off_action:
-      - lambda: id(probe).set_all_inputs(false);
+      - lambda: id(probe).set_button_inputs(false);
 
 button:
   - platform: template
@@ -316,21 +319,22 @@ button:
     on_press:
       - lambda: id(probe).restore();
   - platform: template
-    name: "Hypothesis: LED enable = P0_0 high"
+    # Stock AW9110B pin table (0x3f4a8c18): logical 0-3 = P1_0-P1_3, 9 = P0_5.
+    name: "Hypothesis: LED enable = P1_0 high"
     on_press:
-      - lambda: id(probe).drive_pin(0, true);
+      - lambda: id(probe).drive_pin(8, true);
   - platform: template
-    name: "Hypothesis: SD power = P0_1 high"
-    on_press:
-      - lambda: id(probe).drive_pin(1, true);
-  - platform: template
-    name: "Hypothesis: amp enable = P0_2 high"
-    on_press:
-      - lambda: id(probe).drive_pin(2, true);
-  - platform: template
-    name: "Hypothesis: touch enable = P1_1 high"
+    name: "Hypothesis: SD power = P1_1 high"
     on_press:
       - lambda: id(probe).drive_pin(9, true);
+  - platform: template
+    name: "Hypothesis: amp enable = P1_2 high"
+    on_press:
+      - lambda: id(probe).drive_pin(10, true);
+  - platform: template
+    name: "Hypothesis: touch enable = P0_5 high"
+    on_press:
+      - lambda: id(probe).drive_pin(5, true);
 
   # Read-only dumps
   - platform: template

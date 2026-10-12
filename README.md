@@ -33,7 +33,8 @@ These parts need custom code:
 
 - **Clock display:** a separate display MCU fed over a TX-only UART with a simple framed protocol. See
   [docs/display-protocol.md](docs/display-protocol.md).
-- **GPIO expander:** AW9523B (alternatively AW9110B) that carries enable lines and buttons.
+- **GPIO expander:** Awinic at 0x58, driven by the stock firmware's AW9110B driver (chip ID 0x23, possibly an
+  AW9523B). Enables on P1_0–P1_3, buttons on P0_0–P0_4, touch enable on P0_5.
 - **Accelerometer** used for tap detection.
 - **RIoT+ power path:** a GreenPAK (power latch, battery comparator) and a wireless-power IC. This is the riskiest
   part.

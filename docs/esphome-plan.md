@@ -23,15 +23,15 @@ esphome:
   on_boot:
     priority: 600
     then:
-      # Enable the LED driver and amp on the AW9523B (0x58).
-      # Output port registers: 0x02 (P0), 0x03 (P1). Config registers: 0x04/0x05 (0 = output).
-      # Bit assignments are UNCONFIRMED; see open-questions.md #1.
+      # Expander (0x58), stock AW9110B pin map (hardware-map.md): buttons P0_0-P0_4 in, enables on P1.
+      # Output registers 0x02 (P0) / 0x03 (P1); config 0x04/0x05 (1 = input). Read-modify-write only:
+      # never change P0_6/P0_7/P1_4-P1_7 (releasing P0_6 wedged the bus). LED/amp bits await hw confirm (#11).
       - lambda: |-
           auto *bus = id(bus_a);
-          uint8_t cfg0[2] = {0x04, 0xF8};        // P0_0..2 outputs, rest inputs
+          uint8_t cfg0[2] = {0x04, 0x1F};        // P0_0..4 buttons in; P0_5..7 outputs (stock)
           bus->write(0x58, cfg0, 2);
-          uint8_t out0[2] = {0x02, 0x05};        // LED_EN (bit0) + AMP_EN (bit2) high
-          bus->write(0x58, out0, 2);
+          uint8_t out1[2] = {0x03, 0x05};        // P1_0 LED_EN + P1_2 AMP_EN high (P1 power-on = outputs)
+          bus->write(0x58, out1, 2);
 
 esp32:
   board: esp-wrover-kit

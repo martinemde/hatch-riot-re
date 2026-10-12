@@ -15,6 +15,7 @@ DEPENDENCIES = ["i2c"]
 
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_WRITE_TIMEOUT = "write_timeout"
+CONF_BUTTONS_AT_BOOT = "buttons_at_boot"
 
 riot_probe_ns = cg.esphome_ns.namespace("riot_probe")
 RiotProbe = riot_probe_ns.class_("RiotProbe", cg.Component, i2c.I2CDevice)
@@ -29,6 +30,8 @@ CONFIG_SCHEMA = (
             cv.Optional(
                 CONF_WRITE_TIMEOUT, default="30s"
             ): cv.positive_time_period_milliseconds,
+            # Set the button pins P0_0-P0_4 to INPUT at boot (stock config) without arming. Off by default.
+            cv.Optional(CONF_BUTTONS_AT_BOOT, default=False): cv.boolean,
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -42,3 +45,4 @@ async def to_code(config):
     await i2c.register_i2c_device(var, config)
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
     cg.add(var.set_write_timeout(config[CONF_WRITE_TIMEOUT]))
+    cg.add(var.set_buttons_at_boot(config[CONF_BUTTONS_AT_BOOT]))

@@ -24,6 +24,8 @@ class RiotProbe : public Component, public i2c::I2CDevice {
 
   void set_poll_interval(uint32_t ms) { this->poll_interval_ = ms; }
   void set_write_timeout(uint32_t ms) { this->write_timeout_ = ms; }
+  // Set the button pins P0_0-P0_4 to INPUT once at boot, as the stock firmware does, without arming.
+  void set_buttons_at_boot(bool on) { this->buttons_at_boot_ = on; }
 
   // --- read-only API ---
   const std::string &variant() const { return this->variant_; }
@@ -43,14 +45,14 @@ class RiotProbe : public Component, public i2c::I2CDevice {
 
   // --- guarded write API (expander @0x58 only) ---
   void arm(bool armed);
-  // Drive one expander pin (0..15, P0_0..P1_7) to `high`. Reverts after write_timeout.
+  // Drive one expander pin (0..15, P0_0..P1_7) to `high`. Reverts after write_timeout. P0_6, P0_7 and
+  // P1_4-P1_7 are refused (the stock firmware never changes them).
   bool drive_pin(uint8_t pin, bool high);
   // Set AW9523B P0 to push-pull (GCR bit 4), as the stock driver does. Reverted with everything else.
   bool set_p0_push_pull(bool push_pull);
-  // Put every expander pin into INPUT mode (CFG0=CFG1=0xFF) so button presses can be read. This is the
-  // electrically safe direction (an input never drives the bus). Auto-reverts to the boot snapshot like any
-  // other guarded write. `on=false` reverts immediately.
-  bool set_all_inputs(bool on);
+  // Put the button pins P0_0-P0_4 into INPUT mode (CFG0 |= 0x1F, the stock config) so presses can be read.
+  // Auto-reverts to the boot snapshot like any other guarded write. `on=false` reverts immediately.
+  bool set_button_inputs(bool on);
   // Restore OUT/CFG/GCR registers to the values read at boot.
   void restore();
 
@@ -62,8 +64,20 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Write one expander register, retrying once on failure (the bus is flaky). Logs the I2C error code.
   bool write_reg_(uint8_t reg, uint8_t value);
   bool read_reg_(uint8_t reg, uint8_t *value);
+  // I2C health counters for expander traffic, logged every 30 s.
+  void count_(bool write, i2c::ErrorCode err);
+  void log_i2c_stats_();
+
+  static constexpr int ERR_SLOTS = 8;
+  uint32_t win_reads_{0};
+  uint32_t win_writes_{0};
+  uint32_t win_errors_[ERR_SLOTS]{};
+  uint32_t total_ops_{0};
+  uint32_t total_errors_{0};
+  bool buttons_at_boot_{false};
 
   uint32_t poll_interval_{50};
+  uint32_t fallback_interval_{1000};  // idle read rate when GPIO34 INT is high
   uint32_t write_timeout_{30000};
   uint32_t last_poll_{0};
   uint32_t ready_at_{0};
