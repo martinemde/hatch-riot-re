@@ -117,6 +117,23 @@ byte (cached at `0x3ffd8843`, updated by `<hal_i2c_rx_callback>` `0x40138fdc` fr
 The button task (`butt_task_main` `0x401372b4`) handles single taps, tap counts, long press → shutdown, the
 nightlight button and the "swap" button.
 
+**[O, hw] Confirmed on hardware (probe firmware).** The five front buttons are AW9523B inputs **P0_0–P0_4,
+active-low** (idle pulled high → `P0 = 0x1F`; each press pulls one bit to 0). They are only readable when the pins
+are put in **input** mode — on this unit they default to *outputs* (reading a constant 0x00), so the stock
+firmware must configure them as inputs before reading. The probe's "all pins to INPUT" action was needed to see
+any press. Physical mapping, by pressing each button one at a time:
+
+| Button | Expander bit |
+|---|---|
+| Volume up | P0_0 |
+| Brightness | P0_1 |
+| Night light | P0_2 |
+| Volume down | P0_3 |
+| Touch ring | P0_4 *(by elimination; the four above are timestamp-confirmed, P0_4 fired but its individual press wasn't isolated)* |
+
+Not yet retested on hardware: `GPIO33` TOUCH (needs the touch-controller enable, expander P1_1) and `GPIO36`
+CONNECT.
+
 ## Direct GPIOs (summary)
 
 | GPIO | Use | Tag |

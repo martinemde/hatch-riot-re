@@ -16,9 +16,17 @@ Possible explanations:
 **Resolve:** on hardware, dump AW9523B registers 0x00/0x01 (inputs) while pressing each button, and toggle bits in
 0x02/0x03 while watching the LEDs, amp and SD power.
 
-**[O, hw] partial:** the chip is confirmed **AW9523B** (ID `0x23`), so the "AW9110B numbers its pins differently"
-explanation is ruled out. At boot, inputs read `P1:P0 = 00 00` with no buttons pressed. The button-press phase of
-the probe plan (press each button, watch which input bit toggles) is still needed to settle the overlap.
+**[O, hw] mostly resolved.** The chip is confirmed **AW9523B** (ID `0x23`), ruling out the AW9110B-numbering
+explanation. Pressing each button one at a time (with the pins forced to input mode) shows the five front buttons
+are **P0_0–P0_4, active-low**: Volume up = P0_0, Brightness = P0_1, Night light = P0_2, Volume down = P0_3, Touch
+ring = P0_4 (first four timestamp-confirmed; P0_4 by elimination).
+
+The key to the "overlap": on this unit the expander pins power up as **outputs reading 0x00**, so button presses
+are invisible until the pins are switched to **input** — which is why direct presses registered nothing and the
+probe's "all pins to INPUT" action was required. So the same P0_0–P0_2 pins the firmware uses as enable *outputs*
+(LED/SD/amp) are the button *input* bits 0–2; the firmware must be multiplexing their direction, or the enable
+lines are elsewhere than inferred. **Still open:** run the enable-side hypotheses (drive P0_0/P0_1/P0_2 high and
+watch the LED/SD/amp) to see whether these pins truly double as enables or the enable mapping was misread.
 
 ## 2. RGBW channel order
 

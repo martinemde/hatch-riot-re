@@ -297,6 +297,14 @@ switch:
       - lambda: id(probe).set_p0_push_pull(true);
     turn_off_action:
       - lambda: id(probe).restore();
+  - platform: template
+    name: "Expander: all pins to INPUT (map buttons)"
+    restore_mode: ALWAYS_OFF
+    lambda: return id(probe).inputs_mode();
+    turn_on_action:
+      - lambda: id(probe).set_all_inputs(true);
+    turn_off_action:
+      - lambda: id(probe).set_all_inputs(false);
 
 button:
   - platform: template
