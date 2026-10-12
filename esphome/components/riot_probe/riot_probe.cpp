@@ -3,6 +3,8 @@
 #include <cinttypes>
 
 #include <driver/gpio.h>
+#include <driver/sdmmc_host.h>
+#include <sdmmc_cmd.h>
 
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
@@ -418,6 +420,39 @@ void RiotProbe::restore() {
     // Take a fresh baseline so pins settling back to input level aren't recorded as button activity.
     this->have_inputs_ = false;
   }
+}
+
+void RiotProbe::probe_sd() {
+  // Same slot setup as stock hatch_sd_init (0x4010e6a4): width 1, internal pull-ups. Default 20 MHz, not stock's
+  // 40 MHz, to keep the probe gentle.
+  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+  host.flags = SDMMC_HOST_FLAG_1BIT;
+  sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
+  slot.width = 1;
+  slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+  esp_err_t err = sdmmc_host_init();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "SD: host init failed: %s", esp_err_to_name(err));
+    return;
+  }
+  err = sdmmc_host_init_slot(host.slot, &slot);
+  if (err == ESP_OK) {
+    sdmmc_card_t card{};
+    uint32_t start = millis();
+    err = sdmmc_card_init(&host, &card);
+    if (err == ESP_OK) {
+      uint64_t bytes = uint64_t(card.csd.capacity) * card.csd.sector_size;
+      ESP_LOGW(TAG, "SD: card OK in %" PRIu32 " ms: %s '%s', %" PRIu32 " MB, OCR 0x%08" PRIX32 ", %d kHz",
+               millis() - start, card.is_mmc ? "MMC" : (card.ocr & (1u << 30) ? "SDHC/SDXC" : "SDSC"),
+               card.cid.name, (uint32_t) (bytes >> 20), card.ocr, card.max_freq_khz);
+    } else {
+      ESP_LOGW(TAG, "SD: no card response after %" PRIu32 " ms: %s (is SD power P1_1 on?)", millis() - start,
+               esp_err_to_name(err));
+    }
+  } else {
+    ESP_LOGE(TAG, "SD: slot init failed: %s", esp_err_to_name(err));
+  }
+  sdmmc_host_deinit();
 }
 
 void RiotProbe::dump_config() {

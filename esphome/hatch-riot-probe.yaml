@@ -336,6 +336,12 @@ button:
     on_press:
       - lambda: id(probe).drive_pin(5, true);
 
+  # SD card (read only: card init + ID registers, no filesystem, no data I/O)
+  - platform: template
+    name: "SD: probe card (read-only)"
+    on_press:
+      - lambda: id(probe).probe_sd();
+
   # Read-only dumps
   - platform: template
     name: "Dump expander registers"

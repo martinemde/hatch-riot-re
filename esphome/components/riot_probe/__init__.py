@@ -9,6 +9,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import i2c
+from esphome.components.esp32 import include_builtin_idf_component
 from esphome.const import CONF_ID
 
 DEPENDENCIES = ["i2c"]
@@ -46,3 +47,6 @@ async def to_code(config):
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
     cg.add(var.set_write_timeout(config[CONF_WRITE_TIMEOUT]))
     cg.add(var.set_buttons_at_boot(config[CONF_BUTTONS_AT_BOOT]))
+    # Read-only SD card probe (card init + ID registers, no filesystem). ESPHome excludes these by default.
+    include_builtin_idf_component("esp_driver_sdmmc")
+    include_builtin_idf_component("sdmmc")

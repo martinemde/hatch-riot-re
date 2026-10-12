@@ -158,6 +158,9 @@ step 5 first and retry within the 30 s window. Record the colour of each channel
 5. If a hypothesis fails, try "Expander P0 push-pull (stock mode)" (the stock driver sets it), or step through
    other pins with "Expander test pin" + "Expander: drive test pin".
 6. Turn "Expander writes armed" off when finished. This restores the boot snapshot.
+7. SD power: "Hypothesis: SD power = P1_1 high", wait ≥1 s, then "SD: probe card (read-only)". It initialises the
+   card on the stock slot and logs its type/name/size — card registers only, no filesystem mount and no data I/O.
+   Without SD power it logs `SD: no card response`.
 
 If a "Hypothesis" button is refused because the pin was seen toggling as an input, that alone answers open
 question 1: the pin is a button, not an enable line.

@@ -56,6 +56,12 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Restore OUT/CFG/GCR registers to the values read at boot.
   void restore();
 
+  // --- SD card (read only) ---
+  // Initialise the card on the stock slot (SDMMC slot 1, 1-bit: CLK 14, CMD 15, D0 2, internal pull-ups) and log
+  // its ID/size. Reads card registers only: no filesystem mount, no data reads or writes. Needs SD power
+  // (P1_1 high, then ~1 s to settle, as stock does).
+  void probe_sd();
+
  protected:
   void detect_variant_();
   bool snapshot_();

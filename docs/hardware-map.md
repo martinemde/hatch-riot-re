@@ -92,7 +92,7 @@ driver's identity table at `0x3f4a8c9e`, which this firmware never uses. "P0"/"P
 | Logical pin | Bit | Function | Evidence |
 |---|---|---|---|
 | 0 | **P1_0** | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0`; **[O, hw]** driving it high lit the ring (ch0 = red) |
-| 1 | **P1_1** | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
+| 1 | **P1_1** | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s"); **[O, hw]** high → card answers init, low → no response |
 | 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`); **[O, hw]** high → chime audible, low → same I2S playback silent |
 | 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back; **[O, hw]** high → GPIO35 0.14 V → 1.67 V |
 | 4–8 | **P0_0–P0_4** | Buttons (inputs, interrupt enabled) | [O] config table; **[O, hw]** see [Buttons](#buttons) |
@@ -250,8 +250,13 @@ and cached by path (`audio_filepath_cache`).
 - SDMMC host, slot config copied from `0x3f4823a4`, bus **width = 1**.
 - Host flags `0x21`, max frequency **40 MHz**.
 - Internal pull-ups enabled on **GPIO14 (CLK), GPIO15 (CMD), GPIO2 (D0)**.
-- Powered via expander logical pin 1, then waits 1 s to stabilise.
+- Powered via expander logical pin 1 (**P1_1**), then waits 1 s to stabilise.
 - FAT, mounted at **`/mnt`**.
+
+**[O, hw] 2026-10-12** (probe, card init + registers only, no mount, 20 MHz): with P1_1 **low** the card does not
+respond (`ESP_ERR_INVALID_RESPONSE` after 4 ms). With P1_1 **high** (~18 s settle) init succeeds in 210 ms:
+**SDHC/SDXC, CID name `SS16G`, 15193 MB (16 GB)**, OCR `0xC0FF8000`, 20 MHz. Switching P1_1 on caused no expander
+NACKs.
 
 ## Clock display
 
