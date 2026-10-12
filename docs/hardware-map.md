@@ -307,7 +307,8 @@ RIoT drives **LEDC low-speed channels 1 and 2** (indicators 0 and 2; indicator 1
 the bottom (CONNECT) button. In factory-test mode (`0x401198b8`/`0x4011987c` toggle a flag) the same check instead
 sends a type-2 message to the LED task to light one of two colours by orientation.
 
-See [Status LEDs](#status-leds-riot) for the pins. Not checked on hardware.
+See [Status LEDs](#status-leds-riot) for the pins (**[O, hw]** confirmed: Wi-Fi icon on GPIO13, toddler-lock icon on
+GPIO32, shared red on GPIO23). The upright gating itself was not checked on stock firmware.
 
 ## Status LEDs (RIoT)
 
@@ -315,17 +316,23 @@ See [Status LEDs](#status-leds-riot) for the pins. Not checked on hardware.
 12-bit, 171 Hz** and three channels from stack-built configs — on the same pins RIoT+ uses for I2C1 and variant
 sense:
 
-| LEDC (low-speed) ch | GPIO | Initial duty | Driven by |
-|---|---|---|---|
-| 0 | **GPIO23** | 0x800 | not traced |
-| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` |
-| 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` |
+| LEDC (low-speed) ch | GPIO | Initial duty | Driven by | **[O, hw]** LED |
+|---|---|---|---|---|
+| 0 | **GPIO23** | 0x800 | not traced | **red**, lights **both** windows |
+| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` | **Wi-Fi** icon window |
+| 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` | **green**, **lock** icon window |
+
+**[O, hw] 2026-10-12:** three LEDs behind two icon windows on the case: a **Wi-Fi** icon and a **lock** icon (the
+toddler lock, which disables the hardware buttons). All three are active-high (lit when driven). GPIO23 is a red
+LED shared by both windows (it may be one LED under both, or two in parallel); GPIO13 lights the Wi-Fi window;
+GPIO32 lights the lock window green. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
+firmware shows Wi-Fi and lock status only while the unit is not upright.
 
 Indicator state → `ledc_set_duty_with_hpoint` (duty, hpoint): 0 → (`*0x40110d28`, 0), 1 → (0x1000, 0),
-2 → (0, 0), 3 → (`*0x40110d28`, `*0x40110d28`). Polarity and the exact look (on/off/dim/blink) are unconfirmed.
+2 → (0, 0), 3 → (`*0x40110d28`, `*0x40110d28`). How each state looks (on/off/dim/blink) is unconfirmed; with active-high LEDs, state 2 (duty 0) is off.
 On RIoT+ the same indicators are instead written as codes `0x17/0x11/0x10` (not traced). Shown only when the unit is
-not upright (see [Accelerometer](#accelerometer-da213)). **Unverified on hardware** — the probe only uses these
-pins as variant-sense inputs at boot.
+not upright (see [Accelerometer](#accelerometer-da213)). Pins and colours confirmed on hardware with the probe's
+"Status LED" lights; the stock state → duty mapping is not.
 
 ## Clock display
 
