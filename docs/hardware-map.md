@@ -124,7 +124,7 @@ byte (cached at `0x3ffd8843`, updated by `<hal_i2c_rx_callback>` `0x40138fdc` fr
 | 1 | expander input bit 3 | low |
 | 3 | expander input bit 4 | low |
 | 6 | **GPIO33** ("TOUCH") | high |
-| 5 | **GPIO36** ("CONNECT") | low |
+| 5 | **GPIO36** ("CONNECT") = **bottom button** [O, hw] | low |
 
 "Expander input bit 0–4" = P0_0–P0_4 = logical pins 4–8 in the corrected map above, so there is no overlap with
 the enable outputs (which are on P1).
@@ -150,8 +150,11 @@ Re-confirmed 2026-10-12: each button pressed twice on its own; only its own bit 
 brightness rocker is two switches (up/down); pressing its middle fires both P0_1 and P0_4.
 
 **[O, hw]** `GPIO33` TOUCH goes high while the top is touched, once the touch controller is enabled (P0_5 high
-with port 0 push-pull; see [open-questions.md #12](open-questions.md)). Not yet retested on hardware: `GPIO36`
-CONNECT.
+with port 0 push-pull; see [open-questions.md #12](open-questions.md)).
+
+**[O, hw] 2026-10-12:** `GPIO36` "CONNECT" is the **button on the bottom of the unit**: idle high, low while
+pressed (two presses, two clean low pulses; no expander bit moved). [I] It is likely the button behind the
+firmware's "Power button pressed for 2/5 seconds" logs (long press → shutdown in `butt_task_main`); not traced.
 
 ## Direct GPIOs (summary)
 
@@ -176,7 +179,7 @@ CONNECT.
 | 33 | TOUCH input (touch controller output) | [O] |
 | 34 | GPIO-expander interrupt (input-only) | [O] `gpioe_config_interrupt` → `0x401c518c` with pin `0x22` |
 | 35 | ADC1_CH7: hardware-ID voltage (RIoT) | [O] |
-| 36 | CONNECT input (input-only); ADC1_CH0 sampled by the ULP | [O] |
+| 36 | CONNECT = bottom button, active low (input-only); ADC1_CH0 sampled by the ULP | [O]; **[O, hw]** button |
 | 39 | ADC1_CH3: battery / supply voltage (RIoT+) | [O] |
 
 ## Night-light LEDs (LEDC)
