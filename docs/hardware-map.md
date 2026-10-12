@@ -318,19 +318,36 @@ sense:
 
 | LEDC (low-speed) ch | GPIO | Initial duty | Driven by | **[O, hw]** LED |
 |---|---|---|---|---|
-| 0 | **GPIO23** | 0x800 | not traced | **red**, lights **both** windows |
-| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` | **green**, **Wi-Fi** icon window |
-| 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` | **green**, **lock** icon window |
+| 0 | **GPIO23** | 0x800 | **nothing** — fixed 50 % reference for both indicators | common side of both bicolour LEDs |
+| 1 | **GPIO13** | 0x800 | indicator 0 (connection state) via `0x40139c34` | **Wi-Fi** icon bicolour LED |
+| 2 | **GPIO32** | 0x800 | indicator 2 (`+0x3ac` flag) via `0x40139c34` | **lock** icon bicolour LED |
 
 **[O, hw] 2026-10-12:** three LEDs behind two icon windows on the case: a **Wi-Fi** icon and a **lock** icon (the
-toddler lock, which disables the hardware buttons). All three are active-high (lit when driven). GPIO23 is a red
-LED shared by both windows (it may be one LED under both, or two in parallel); GPIO13 lights the Wi-Fi window
-green; GPIO32 lights the lock window green. So each window is a red/green pair: its own green plus the shared
-red. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
+toddler lock, which disables the hardware buttons). Driving one pin alone (others low): GPIO23 lights **both**
+windows red; GPIO13 lights the Wi-Fi window green; GPIO32 lights the lock window green.
+
+**Wiring [O, hw]:** each window is a **red/green bicolour LED wired anti-parallel between GPIO23 and its own pin**
+(GPIO13 = Wi-Fi, GPIO32 = lock): current GPIO23 → pin lights red, pin → GPIO23 lights green. Proof: GPIO23 and
+GPIO13 both driven at the same in-phase 50 % PWM → the Wi-Fi window goes **dark** (no voltage across it) while the
+lock window stays red.
+
+**How stock drives it [O, Ghidra]:** nothing ever changes GPIO23 after boot (no `ledc_set_duty*`, fade or GPIO
+call on low-speed ch0 / pin 23 on RIoT), so it is a constant 50 % square wave. `0x40139c34` sets the indicator pin's
+duty and phase (hpoint) against it, with `*0x40110d28 = 0x800`:
+
+| Indicator state | Pin duty, hpoint | vs GPIO23 | Colour |
+|---|---|---|---|
+| 0 | 0x800, 0 | in phase | **off** |
+| 1 | 0x1000 (100 %), 0 | high while 23 is low | **green** |
+| 2 | 0, 0 | low while 23 is high | **red** |
+| 3 | 0x800, 0x800 | anti-phase | **red + green = amber** |
+
+From the status bits (`GPIO_task1_service`): bit *n* alone → red, bit *n+4* alone → green, both → amber, none → off
+(n = 0 Wi-Fi, 2 lock). States 1–3 were inferred from this wiring; only off/red/green were seen directly. So indicator 2's `+0x3ac` flag is the **toddler-lock** state, and the stock
 firmware shows Wi-Fi and lock status only while the unit is not upright.
 
 Indicator state → `ledc_set_duty_with_hpoint` (duty, hpoint): 0 → (`*0x40110d28`, 0), 1 → (0x1000, 0),
-2 → (0, 0), 3 → (`*0x40110d28`, `*0x40110d28`). How each state looks (on/off/dim/blink) is unconfirmed; with active-high LEDs, state 2 (duty 0) is off.
+2 → (0, 0), 3 → (`*0x40110d28`, `*0x40110d28`) with `*0x40110d28 = 0x800` — see the colour table above.
 On RIoT+ the same indicators are instead written as codes `0x17/0x11/0x10` (not traced). Shown only when the unit is
 not upright (see [Accelerometer](#accelerometer-da213)). Pins and colours confirmed on hardware with the probe's
 "Status LED" lights; the stock state → duty mapping is not.

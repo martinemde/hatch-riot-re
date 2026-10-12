@@ -129,6 +129,8 @@ output:
     frequency: 19500Hz
     max_power: 25%
   # Status LEDs (RIoT only: on RIoT+ these pins are I2C1, so drop these before including riot-plus.yaml).
+  # Two red/green bicolour LEDs, each anti-parallel between GPIO23 and GPIO13 (Wi-Fi) / GPIO32 (lock): drive one
+  # side high for red (23) or green (13/32); both at the same duty = off.
   # Stock: low-speed LEDC, 12-bit, 171 Hz, initial duty 50% (hal_check_riot_hardware). Capped at that 50%.
   - platform: ledc
     id: status_gpio23
@@ -148,7 +150,7 @@ output:
 
 light:
   - platform: monochromatic
-    name: "Status LED GPIO23 (red, both windows)"
+    name: "Status LED GPIO23 (common: red in both windows)"
     output: status_gpio23
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
