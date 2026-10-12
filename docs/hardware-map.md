@@ -304,8 +304,44 @@ A separate display MCU on **UART1 TX = GPIO27**. See [display-protocol.md](displ
   computes a hardware ID from the two voltages.
   **[O, hw] 2026-10-12** (this RIoT, 12 dB attenuation, ESPHome-calibrated): ID_OUT (P1_3) **low → GPIO35 =
   0.14 V**, **high → 1.67 V** (steady over 6 samples; back to 0.14 V after release). 1.67 V is ≈ half of 3.3 V, so the
-  divider is roughly 1:1; 0.14 V is near the ADC's floor at this attenuation (≈ 0 V). How the firmware maps the two
-  readings to an ID was not traced. GPIO39 read a steady 3.00 V throughout.
+  divider is roughly 1:1; 0.14 V is near the ADC's floor at this attenuation (≈ 0 V). GPIO39 read a steady 3.00 V
+  throughout.
+
+### Hardware version / ID
+
+**[O, Ghidra]** `hal_update_hardware` `0x40139874` calls `hal_check_riot_hardware(7)`, which returns a version
+`major.minor.id`, logs `HW v%d.%d.%d`, and stores it at `0x3ffbdec0 + 0x11..0x13`:
+
+- **major** = 7 on RIoT, 8 on RIoT+ (variant from the GPIO13/32/23 sense). **minor** = 0.
+- **id**: GPIO35 is read raw with ID_OUT off, then on (`esp_adc_cal`, 11 dB). `0x401d6da8(v_off, v_on)` looks the
+  voltage up in a range tree — **v_on** in tree `0x3f4ac110` if v_on ≤ 2999 mV, otherwise **v_off** in tree
+  `0x3ffc05e4`:
+
+| v_on (mV) | id | | v_off (mV), when v_on > 2999 | id |
+|---|---|---|---|---|
+| 18–282 | 4 | | 18–282 | 8 |
+| 318–582 | 3 | | 379–643 | 15 |
+| 720–984 | 2 | | 772–1036 | 14 |
+| 1111–1375 | 1 | | 1154–1418 | 13 |
+| **1518–1782** | **0** | | (1571–1835?) | (12?) |
+| 1925–2189 | 7 | | 1952–2216 | 11 |
+| 2316–2580 | 6 | | 2334–2598 | 10 |
+| 2718–2982 | 5 | | 2727–2991 | 9 |
+
+  (The second tree walked as 11 twice with no 12; the 12 row is inferred from the spacing — one node was likely
+  misread.) **This unit: v_on = 1.67 V → id 0 → `HW v7.0.0`.**
+
+**Uses of the version:**
+
+| Where | Use |
+|---|---|
+| `_is_nuvoton` `0x40104f24` (from `_audio_decoder_impl`) | **amplifier channel count**: minor 0 → id 0 = **1 channel (mono)**, id ≠ 0 = 2; other minors warn "Unknown amplifier channel count" and use 2. Sets the I2S slot mode (mono → RIGHT slot, stereo → BOTH). |
+| `0x40134460` | formats `"%d.%d.%d"` into the device state (`+0x15f`) when it changes — the hardware version reported to the cloud/app |
+| `0x4013a330` (LED duty scaling) | scaling skipped when major = 5 |
+| `0x40139d14` (product type getter) | type 5 with id 8–15 is reported as type 7 |
+
+So on the Rest 2nd gen the ID's main effect is choosing a **mono** amp (matching the single speaker) and reporting
+`7.0.0`.
 - **RIoT+:** reads ADC1_CH3 (GPIO39), then finds and checks the GreenPAK (bus 0). The power task
   (`power_task_*`) handles:
   - battery percentage via the GreenPAK comparator (it moves Vref to bracket the battery voltage);
