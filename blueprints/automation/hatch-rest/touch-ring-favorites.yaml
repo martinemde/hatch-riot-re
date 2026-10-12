@@ -1,0 +1,147 @@
+blueprint:
+  name: Hatch Rest touch ring favorites
+  description: >-
+    Replicates the stock Hatch Rest touch ring. **Tap** to cycle through a list of favorites (scenes or scripts that
+    set the night light and speaker). **Touch and hold** to turn the light and sound off.
+
+
+    Each tap activates the favorite after the one activated most recently, wrapping round at the end. While the light
+    and speaker are both off, a tap instead starts from the first favorite (or resumes the last one, see below).
+    Favorites are scenes or scripts: a scene can set the light and the speaker's volume and media; use a script for
+    anything a scene can't do (e.g. play a sound on a loop).
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+  source_url: https://github.com/w1ll1am23/hatch-riot-re/blob/main/blueprints/automation/hatch-rest/touch-ring-favorites.yaml
+  input:
+    touch_sensor:
+      name: Touch sensor
+      description: The touch ring binary sensor (e.g. "Touch" on the Hatch Rest).
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+    light_entity:
+      name: Light
+      description: The night light. Turned off by a hold.
+      selector:
+        entity:
+          filter:
+            - domain: light
+    media_player_entity:
+      name: Media player
+      description: The speaker. Stopped by a hold.
+      selector:
+        entity:
+          filter:
+            - domain: media_player
+    favorites:
+      name: Favorites
+      description: Scenes or scripts to cycle through, in order.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: [scene, script]
+    start_from:
+      name: Tap when off
+      description: What a tap does while the light and speaker are both off.
+      default: first
+      selector:
+        select:
+          options:
+            - label: Start from the first favorite
+              value: first
+            - label: Resume the last favorite used
+              value: resume
+            - label: Go to the next favorite
+              value: next
+    hold_time:
+      name: Hold time
+      description: How long the ring must be held to turn everything off (stock is 1 second).
+      default: 1
+      selector:
+        number:
+          min: 0.3
+          max: 5
+          step: 0.1
+          unit_of_measurement: s
+          mode: slider
+    lock_switch:
+      name: Lock switch (optional)
+      description: Ignore the ring while this switch is on (e.g. "Toddler Lock").
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: [switch, input_boolean]
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input touch_sensor
+    from: "off"
+    to: "on"
+
+variables:
+  touch_sensor: !input touch_sensor
+  light_entity: !input light_entity
+  media_player_entity: !input media_player_entity
+  favorites: !input favorites
+  start_from: !input start_from
+  hold_time: !input hold_time
+  lock_switch: !input lock_switch
+
+conditions:
+  - condition: template
+    value_template: "{{ not lock_switch or not is_state(lock_switch, 'on') }}"
+
+actions:
+  # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step runs.
+  - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+    timeout:
+      seconds: "{{ hold_time }}"
+  - choose:
+      # Hold: everything off.
+      - conditions: "{{ not wait.completed }}"
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: "{{ light_entity }}"
+          - action: media_player.media_stop
+            target:
+              entity_id: "{{ media_player_entity }}"
+            continue_on_error: true
+      # Tap: next favorite.
+      - conditions: "{{ favorites | count > 0 }}"
+        sequence:
+          - variables:
+              # The favorite activated most recently: a scene's state is its last activation time, a script has
+              # last_triggered. -1 if none has been used yet.
+              last_index: >-
+                {% set ns = namespace(index=-1, ts=0) %}
+                {% for e in favorites %}
+                  {% set t = as_timestamp(states(e) if e.startswith('scene.') else state_attr(e, 'last_triggered'), 0) %}
+                  {% if t > ns.ts %}{% set ns.index = loop.index0 %}{% set ns.ts = t %}{% endif %}
+                {% endfor %}
+                {{ ns.index }}
+              all_off: >-
+                {{ not is_state(light_entity, 'on')
+                   and states(media_player_entity) not in ['playing', 'buffering'] }}
+              next_index: >-
+                {% set n = favorites | count %}
+                {% if all_off and start_from == 'first' %}0
+                {% elif all_off and start_from == 'resume' %}{{ [last_index, 0] | max }}
+                {% else %}{{ (last_index + 1) % n }}{% endif %}
+              target_favorite: "{{ favorites[next_index | int] }}"
+          - if: "{{ target_favorite.startswith('scene.') }}"
+            then:
+              - action: scene.turn_on
+                target:
+                  entity_id: "{{ target_favorite }}"
+            else:
+              - action: script.turn_on
+                target:
+                  entity_id: "{{ target_favorite }}"

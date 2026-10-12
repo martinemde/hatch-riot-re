@@ -86,6 +86,20 @@ These parts needed custom code (local components in [`esphome/components/`](esph
   flashing anything.**
 - `scripts/restore.sh`: write a backup back to the device (return to stock).
 
+### Touch ring blueprint
+
+[`blueprints/automation/hatch-rest/touch-ring-favorites.yaml`](blueprints/automation/hatch-rest/touch-ring-favorites.yaml)
+brings back the stock touch ring in Home Assistant: **tap** to cycle through a list of favorites (scenes or scripts
+that set the light and speaker), **touch and hold** (1 s, like stock) to turn the light and sound off. Pick the touch
+sensor, light, media player and favorites when creating the automation; optionally pick the Toddler Lock switch so
+the ring is ignored while it's on. Needs Home Assistant 2024.10 or later.
+
+[![Import blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fw1ll1am23%2Fhatch-riot-re%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fhatch-rest%2Ftouch-ring-favorites.yaml)
+
+Each tap activates the favorite after the one used most recently. While the light and speaker are both off, a tap
+starts from the first favorite instead (configurable: resume the last one, or go to the next). A scene can set the
+light plus the speaker's volume and media; use a script for anything a scene can't do.
+
 ## Getting the image
 
 Images are downloaded with the fetcher in the sibling repo `~/Dev/hatch_firmware` (`hatch_firmware.py`). Firmware
