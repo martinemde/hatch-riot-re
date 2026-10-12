@@ -29,7 +29,6 @@ feature below was tested on the teardown unit (RIoT, Hatch Rest 2nd gen):
 | Toddler lock | template switch that blocks the button actions; lock icon green |
 | Clock | `hatch_display` over UART1, 12 h time from Home Assistant, brightness control |
 | Status LEDs | Wi-Fi icon green / amber / red for HA connected / Wi-Fi only / offline |
-| Test Chime | RTTTL straight to the speaker, for checking the audio path |
 
 Local components:
 

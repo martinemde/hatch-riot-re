@@ -194,11 +194,6 @@ media_player:
           else:
             - script.execute: amp_on_after_clocks
 
-rtttl:
-  id: chime
-  speaker: spk
-  gain: 25%
-
 switch:
   # Amp enable (P1_2): on only while playing. Silent when off, confirmed on hardware.
   - platform: gpio
@@ -383,15 +378,3 @@ sensor:
 button:
   - platform: restart
     name: Restart
-  # Same chime the probe played (known to work): checks amp + I2S without the media pipeline.
-  - platform: template
-    name: Test Chime
-    on_press:
-      - rtttl.play: "beep:d=8,o=5,b=120:c6,e6,g6"
-      - script.execute: amp_on_after_clocks
-      - delay: 3s
-      - if:
-          condition:
-            media_player.is_idle: player
-          then:
-            - switch.turn_off: amp
