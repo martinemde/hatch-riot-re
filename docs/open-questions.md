@@ -101,9 +101,12 @@ logical pin 0 is **P1_0**.
 The OUT1 write reported an I2C timeout/NACK yet took effect, and the board then hung (bus wedged, power-cycle
 needed) — see [probe-firmware.md](probe-firmware.md) bus notes.
 
-## 12. GPIO33 TOUCH behaviour — PARTIAL
+## 12. GPIO33 TOUCH behaviour — RESOLVED
 
 Touching the ring with the controller **not** enabled does nothing (expected). The earlier "touch-enable" drive
 (P1_1 high) actually switched SD power; with the corrected pin table the touch enable is **P0_5** (logical 9).
-**Resolve:** press "Hypothesis: touch enable = P0_5 high" and, within the 30 s window, touch the ring and confirm
-`GPIO33` goes high.
+
+**[O, hw] Confirmed 2026-10-12:** with port 0 in **push-pull** (GCR bit 4, as stock sets it) and P0_5 driven high,
+each touch of the top made `GPIO33` go high, then low on release. With port 0 in its power-on **open-drain** mode,
+"P0_5 high" only releases the line and the controller stays off (no `GPIO33` change) — the enable has no pull-up,
+so it must be actively driven.

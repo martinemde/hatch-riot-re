@@ -96,7 +96,7 @@ driver's identity table at `0x3f4a8c9e`, which this firmware never uses. "P0"/"P
 | 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`); **[O, hw]** high → chime audible, low → same I2S playback silent |
 | 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back |
 | 4–8 | **P0_0–P0_4** | Buttons (inputs, interrupt enabled) | [O] config table; **[O, hw]** see [Buttons](#buttons) |
-| 9 | **P0_5** | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78` |
+| 9 | **P0_5** | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78`; **[O, hw]** needs P0 push-pull (GCR bit 4): high → touches show on `GPIO33` |
 | — | P0_6, P0_7, P1_4–P1_7 | Not part of the AW9110B model; **never changed by stock** | [O, Ghidra] config is read-modify-write, so they keep their power-on state (output, low) |
 
 Boot config (`gpioe_aw9110b_config_pins` `0x401c70d4`, table `0x3f4a8b4c`: entries 0–3 and 9 = 1 → output, rest
@@ -149,7 +149,8 @@ INPUT" action does the same. Physical mapping, by pressing each button one at a 
 Re-confirmed 2026-10-12: each button pressed twice on its own; only its own bit moved (`seen_toggling = 001F`). The
 brightness rocker is two switches (up/down); pressing its middle fires both P0_1 and P0_4.
 
-Not yet retested on hardware: `GPIO33` TOUCH (needs the touch-controller enable, expander P1_1) and `GPIO36`
+**[O, hw]** `GPIO33` TOUCH goes high while the top is touched, once the touch controller is enabled (P0_5 high
+with port 0 push-pull; see [open-questions.md #12](open-questions.md)). Not yet retested on hardware: `GPIO36`
 CONNECT.
 
 ## Direct GPIOs (summary)
