@@ -81,6 +81,8 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint16_t inputs_{0};
   uint16_t seen_toggling_{0};
   uint32_t change_count_{0};
+  uint16_t candidate_value_{0};    // debounce: value awaiting a confirming second read
+  uint8_t candidate_streak_{0};    // consecutive polls the candidate has held
 
   bool armed_{false};
   uint16_t driven_mask_{0};

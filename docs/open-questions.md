@@ -82,3 +82,21 @@ flashing it.
 
 The [teardown](teardown.md) unit is model **HBREST2 = Hatch Rest (2nd gen)**, and it is the plain **"RIoT"**
 variant (main board "RIoT Main V1.5"). So RIoT = Rest 2nd gen; by extension RIoT+ = Rest+ 2nd gen.
+
+## 11. LED driver enable line — NOT FOUND
+
+**[O, hw]** The four LEDC channels (GPIO5/18/19/4) produce no visible light on their own, so the LED driver needs
+an enable. The RE's guess (expander "logical pin 0" = P0_0) is **wrong**: P0_0 is the volume-up button, and
+driving P0_0 high with a channel on produced nothing. The real enable pin is unidentified.
+
+**Resolve:** with one LEDC channel on at ~50 %, arm the probe and drive each remaining expander output high one at
+a time (`Expander test pin` + `Expander: drive test pin`, HIGH) — candidates **P0_5, P0_6, P0_7, P1_0, P1_2–P1_7**
+— watching for the ring to light. It may also need more than one line (e.g. a power rail plus an enable), or a
+pin on the separate LED-ring board rather than the expander.
+
+## 12. GPIO33 TOUCH behaviour — PARTIAL
+
+Touching the ring with the controller **not** enabled does nothing (expected). The touch-enable drive (P1_1 high)
+now succeeds (see [hardware-map](hardware-map.md#gpio-expander-lines)), but we did not capture a `GPIO33 TOUCH`
+state change while enabled before moving on. **Resolve:** drive P1_1 high and, within the 30 s window, touch the
+ring and confirm `GPIO33` goes high.

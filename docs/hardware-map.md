@@ -95,6 +95,12 @@ The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed h
 
 Pin config table copied by `gpioe_init_device` from `0x3f4a8b4c`: entries 0–3 and 9 = 1, the rest 0.
 
+**[O, hw]** Touch-controller enable on **P1_1 (logical pin 9)** is confirmed drivable: the probe set `OUT1` bit 1
+high and `CFG1` to output with no error. (Whether that actually powers the touch pad — i.e. makes `GPIO33` TOUCH
+respond — was not captured before we moved on; the drive itself works.) The P0_0–P0_3 "enable" entries are
+suspect: P0_0–P0_4 read as the five buttons (see [Buttons](#buttons)), and driving P0_0 high did **not** enable
+the LEDs, so the logical-pin-0..2 = LED/SD/amp mapping does not hold for this board as written.
+
 ### Buttons
 
 `0x40139bb8` [O]. It only runs when the expander is at 0x58. It builds a button bitmask from the expander's input
@@ -183,7 +189,13 @@ board (`SKT1841LWAAW 622042B-U5`) carries **12 RGB LEDs (D1–D12) + 12 white LE
 drive the colour LEDs in common and the 4th channel drives the whites. Which LEDC channel is which colour is still
 to be checked on hardware.
 
-The LED driver also needs the expander **LED enable** line (logical pin 0) set high.
+The LED driver also needs an expander **LED enable** line set high.
+
+⚠ **[O, hw]** On hardware the four LEDC channels produce **no light** on their own, so an enable line is indeed
+required — but it is **not P0_0**. Driving P0_0 high (the RE's "logical pin 0") while a channel was on did
+nothing, and P0_0 is in fact the volume-up button (see [Buttons](#buttons)). The real LED-enable pin was not
+found; it still needs a sweep of the remaining expander outputs (P0_5–7, P1_0, P1_2–P1_7). See
+[open-questions.md #11](open-questions.md).
 
 RIoT (hw type 1) also sets up LEDC from stack-built configs in `hal_check_riot_hardware` (`0x40139606`). Those were
 not decoded; check whether they override the table above on RIoT.

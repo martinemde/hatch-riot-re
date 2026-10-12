@@ -154,8 +154,21 @@ void RiotProbe::loop() {
     return;
   }
   uint16_t changed = value ^ this->inputs_;
-  if (changed == 0)
+  if (changed == 0) {
+    this->candidate_streak_ = 0;  // reading matches accepted state; clear any pending candidate
     return;
+  }
+  // Debounce against one-off bad reads (the wedged bus occasionally returns 0xFF for a whole port, which would
+  // otherwise poison seen_toggling and block legitimate pin drives). Require the new value to repeat on two
+  // consecutive polls before accepting it. Real button edges last far longer than one 50 ms poll.
+  if (value != this->candidate_value_) {
+    this->candidate_value_ = value;
+    this->candidate_streak_ = 1;
+    return;
+  }
+  if (++this->candidate_streak_ < 2)
+    return;
+  this->candidate_streak_ = 0;
   // Ignore changes caused by our own driving of a pin.
   uint16_t external = changed & ~this->driven_mask_;
   this->seen_toggling_ |= external;
