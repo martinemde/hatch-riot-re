@@ -17,7 +17,8 @@ V1.5" (2021-06-5). [O, hw]
 | Item | Value | Tag / evidence |
 |---|---|---|
 | Chip | ESP32 (classic, dual-core Xtensa LX6) | [O] image header `chip_id 0` |
-| Module | **ESP32-WROVER-E**, PCB-antenna variant (8 MB PSRAM) | [O, hw] can marking (photo 11); [O] PSRAM driver + himem use → 8 MB |
+| Module | **ESP32-WROVER-E-N16R8**, PCB-antenna variant | [O, hw] can marking (photo 11); PSRAM driver + himem use → 8 MB |
+| Flash | 16 MB | [O, hw] `esptool flash-id`; matches image header |
 | SDK | ESP-IDF v5.5.4 | [O] app descriptor |
 | Entry | `0x40081b5c` | [O] image header |
 

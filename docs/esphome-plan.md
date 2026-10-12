@@ -133,11 +133,10 @@ binary_sensor:
 
 If the installed chip is locked (flash encryption / secure boot in eFuses) or dead, the Wi-Fi module can be
 reworked. Confirmed from the [teardown](teardown.md): the part is an **ESP32-WROVER-E, PCB-antenna variant**
-(8 MB PSRAM), on the "RIoT Main V1.5" board.
+(16 MB flash, 8 MB PSRAM — part number **ESP32-WROVER-E-N16R8**), on the "RIoT Main V1.5" board.
 
 - **Buy:** genuine Espressif **ESP32-WROVER-E** (not a clone), **PCB antenna** (not the IPEX/U.FL version).
-- **Flash size:** read the installed part with `esptool … flash-id` and match it (`N4` = 4 MB, `N8` = 8 MB,
-  `N16` = 16 MB; the app-image header says 16 MB → likely **N16R8**). Verify before buying.
+- **Flash size:** confirmed **16 MB** via `esptool … flash-id` → the `N16` suffix (N16R8).
 - A fresh module has **blank eFuses**, so it clears a locked-chip problem — but it's one-way: you lose the stock
   firmware's encrypted NVS (device certs, Wi-Fi), so you can't go back to stock afterward.
 - This is module-level hot-air rework (castellated 18×31 mm module), not bare-QFN work.

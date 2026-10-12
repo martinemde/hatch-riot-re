@@ -24,8 +24,8 @@ esphome:
 
 esp32:
   board: esp32dev
-  # Smaller than the real flash is harmless; the module is at least 4 MB.
-  flash_size: 4MB
+  # ESP32-WROVER-E-N16R8: 16 MB flash (confirmed via esptool flash-id), 8 MB PSRAM.
+  flash_size: 16MB
   framework:
     type: esp-idf
     advanced:

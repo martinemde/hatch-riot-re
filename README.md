@@ -16,7 +16,7 @@ Findings come from **static analysis** of one firmware image, with the hardware 
 | Format | ESP-IDF application image, chip ESP32 (`chip_id 0`), SHA-256 appended |
 | Project / version | `riot`, `X.711.644-dirty` (DFU 7.1.644), built Sep 25 2026 |
 | SDK | ESP-IDF v5.5.4 |
-| Module | **ESP32-WROVER-E** (PCB antenna, 8 MB PSRAM); built with `-mfix-esp32-psram-cache-issue` |
+| Module | **ESP32-WROVER-E-N16R8** (PCB antenna, 16 MB flash, 8 MB PSRAM); built with `-mfix-esp32-psram-cache-issue` |
 | Variants | firmware detects **"RIoT"** (Rest 2nd gen, this unit) and **"RIoT+"** (Rest+ 2nd gen) at boot |
 
 ## Verdict

@@ -9,9 +9,9 @@ inferred from the firmware — most importantly the device identity and the exac
   input `5V⎓1A`. The main board silkscreen reads **"RIoT Main V1.5", dated 2021-06-5**. So the firmware's
   "RIoT" is the Rest 2nd gen (previously a guess — now confirmed).
 - **MCU module:** **ESP32-WROVER-E** (clearly printed on the can), with the **PCB antenna** variant (serpentine
-  trace at the module end, no U.FL connector). Module FCC ID `2AFYZ-ESP32WROVERE`. This settles the
-  chip-replacement spec: an ESP32-WROVER-E, PCB-antenna version. See
-  [esphome-plan.md](esphome-plan.md#replacing-the-module).
+  trace at the module end, no U.FL connector). Module FCC ID `2AFYZ-ESP32WROVERE`. Flash is **16 MB** (confirmed
+  via `esptool flash-id`), so the full part is **ESP32-WROVER-E-N16R8** (16 MB flash, 8 MB PSRAM). This settles
+  the chip-replacement spec. See [esphome-plan.md](esphome-plan.md#replacing-the-module).
 - **LEDs:** a separate LED ring board (marking `SKT1841LWAAW 622042B-U5`) with **12 RGB LEDs (D1–D12) and 12
   white LEDs (W1–W12)**. That matches the four LEDC channels in the firmware: R/G/B drive the colour LEDs in
   common, the 4th channel drives the separate whites.
@@ -37,8 +37,6 @@ inferred from the firmware — most importantly the device identity and the exac
 
 ## Still to read off the board (not legible in these photos)
 
-- **Flash size** (N4/N8/N16): not printed on the WROVER-E can — read it with `esptool … flash-id`. (The app
-  image header says 16 MB; verify.)
 - **Accelerometer / sensor part numbers** on RIoT Main (`U*` chips) — need sharper close-ups.
 - **Whether the "RIoT Base" board carries the GreenPAK.** The firmware talks about a "base board GreenPAK"; a
   clear shot of the `RIoT_B…` board's ICs would confirm it on this (non-Plus) unit. See
