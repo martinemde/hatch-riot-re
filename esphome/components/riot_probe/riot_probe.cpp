@@ -26,6 +26,10 @@ static const uint8_t GCR_P0_PUSH_PULL = 0x10;
 static const uint16_t NEVER_DRIVE = 0xF0C0;  // P0_6, P0_7, P1_4-P1_7
 // The stock config makes exactly the five button pins inputs.
 static const uint8_t CFG0_BUTTONS = 0x1F;
+// Quiet time after an expander write (a load switching on NACKed the next write ~3 ms later), gap between
+// retries, and attempts per write.
+static const uint32_t SETTLE_MS = 20, RETRY_GAP_MS = 10;
+static const int WRITE_ATTEMPTS = 3;
 
 // Stock font, ASCII 0x20..0x7E (firmware table at 0x3f486910).
 static const uint8_t FONT[95] = {
@@ -113,21 +117,33 @@ void RiotProbe::detect_variant_() {
            this->sense_[2], this->variant_.c_str());
 }
 
+void RiotProbe::settle_() {
+  // An output change can switch a load (LED driver, touch controller...), and for a few ms afterwards the
+  // expander NACKs and transactions risk hanging the bus. Keep every expander transaction out of that window.
+  int32_t wait = int32_t(this->quiet_until_ - millis());
+  if (wait > 0)
+    delay(wait);
+}
+
 bool RiotProbe::read_reg_(uint8_t reg, uint8_t *value) {
+  this->settle_();
   i2c::ErrorCode err = this->read_register(reg, value, 1);
   this->count_(false, err);
   return err == i2c::ERROR_OK;
 }
 
 bool RiotProbe::write_reg_(uint8_t reg, uint8_t value) {
-  // Register writes are idempotent, so one retry is safe.
-  for (int attempt = 1; attempt <= 2; attempt++) {
+  // Register writes are idempotent, so retrying is safe. Space attempts out instead of retrying straight back
+  // into the post-switch window, and leave a quiet period after every write (each may change an output).
+  for (int attempt = 1; attempt <= WRITE_ATTEMPTS; attempt++) {
+    this->settle_();
     i2c::ErrorCode err = this->write_register(reg, &value, 1);
     this->count_(true, err);
+    this->quiet_until_ = millis() + (err == i2c::ERROR_OK ? SETTLE_MS : RETRY_GAP_MS);
     if (err == i2c::ERROR_OK)
       return true;
-    ESP_LOGW(TAG, "Write expander reg 0x%02X <- 0x%02X failed (attempt %d/2, i2c error %d)", reg, value, attempt,
-             (int) err);
+    ESP_LOGW(TAG, "Write expander reg 0x%02X <- 0x%02X failed (attempt %d/%d, i2c error %d)", reg, value, attempt,
+             WRITE_ATTEMPTS, (int) err);
   }
   return false;
 }

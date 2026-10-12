@@ -64,6 +64,8 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // Write one expander register, retrying once on failure (the bus is flaky). Logs the I2C error code.
   bool write_reg_(uint8_t reg, uint8_t value);
   bool read_reg_(uint8_t reg, uint8_t *value);
+  // Block until the post-write quiet period has passed.
+  void settle_();
   // I2C health counters for expander traffic, logged every 30 s.
   void count_(bool write, i2c::ErrorCode err);
   void log_i2c_stats_();
@@ -78,6 +80,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
 
   uint32_t poll_interval_{50};
   uint32_t fallback_interval_{1000};  // idle read rate when GPIO34 INT is high
+  uint32_t quiet_until_{0};           // no expander transaction before this millis()
   uint32_t write_timeout_{30000};
   uint32_t last_poll_{0};
   uint32_t ready_at_{0};
