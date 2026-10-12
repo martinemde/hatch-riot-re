@@ -287,6 +287,7 @@ void RiotProbe::dump(uint8_t address, uint8_t start, uint8_t count) {
     size_t pos = 0;
     for (uint16_t reg = base; reg < base + 16 && reg < uint16_t(start) + count; reg++) {
       uint8_t v;
+      delay(5);  // spacing test: back-to-back reads failed ~50 %
       if (this->read_register(uint8_t(reg), &v, 1) == i2c::ERROR_OK) {
         pos += snprintf(line + pos, sizeof(line) - pos, "%02X ", v);
       } else {

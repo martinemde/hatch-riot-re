@@ -85,8 +85,8 @@ i2c:
       number: GPIO0
       ignore_strapping_warning: true
     scl: GPIO22
-    # Stock uses 400 kHz. 100 kHz made each transaction 4x longer, i.e. more exposed to LED-PWM glitches.
-    frequency: 400kHz
+    # Stock uses 400 kHz, but back-to-back reads failed ~65 % at 400 kHz vs ~47 % at 100 kHz on this board.
+    frequency: 100kHz
     # Stock disables the internal pull-ups (external pull-ups on the board). If the scan finds nothing,
     # set these to true and retry.
     sda_pullup_enabled: false
