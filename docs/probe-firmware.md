@@ -151,13 +151,25 @@ web-UI upload endpoint is disabled, so that key is the only way in.
 **Rollback safety net.** The config sets `enable_ota_rollback: true`
 (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`) and pairs it with the `safe_mode:` component.
 
-⚠ **Observed on hardware:** the running firmware logs `Bootloader rollback: support unknown` — i.e. ESPHome could
-*not* confirm the bootloader-level rollback is active (the flashed stock bootloader may not have been replaced, or
-does not report the capability). **Do not rely on automatic bootloader rollback.** What *is* confirmed active is
-`safe_mode` at the app level: `Successful after: 60s`, `Invoke after: 10 attempts`, `Duration: 300s`. So a bad OTA
-that crash-loops drops the device into safe mode (fallback AP + OTA listener) rather than bricking it — you
-recover with another OTA, still no serial cable. (The stock firmware's own logs mention "rollback cancelled" and
-"three-pings validation", a separate vendor mechanism.)
+✅ **Confirmed working on hardware.** Although `dump_config` prints `Bootloader rollback: support unknown` (an
+ESPHome reporting quirk, not the truth), rollback demonstrably *fires*: after an OTA whose new image reset before
+it was validated, the device logged
+
+```
+OTA rollback detected! Rolled back from partition 'app1'
+ The device reset before the boot was marked successful
+```
+
+and reverted to the previous image. A freshly OTA'd image must run and connect for `Successful after: 60s` to be
+marked valid (`esp_ota_mark_app_valid`); if it resets before then — crash, **or a brownout** — the bootloader
+reverts to the previous image on the next boot. `safe_mode` (`Invoke after: 10 attempts`, `Duration: 300s`) is the
+app-level backstop on top of that.
+
+⚠ **Practical gotcha seen here:** on an unstable supply the new image kept browning out inside the 60 s window, so
+every OTA got rolled back to the prior image and the update appeared not to "take". Two ways out: power the board
+from a stable 3.3 V supply so the image survives validation, or flash that build **over serial** (a serial write
+boots directly, with no pending-validation state to roll back). (The stock firmware's own logs mention "rollback
+cancelled" and "three-pings validation", a separate vendor mechanism.)
 
 ### Why the stock firmware can't OTA this image
 
