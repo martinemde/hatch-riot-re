@@ -37,6 +37,17 @@ scripts/backup.sh /dev/ttyUSB0
 
 If it prints `STOP`, do not continue.
 
+The two full-flash reads are long (≈6–8 min each at 460800 baud for 16 MB) and a serial hiccup can abort the
+second one. Pass 1 is kept in `backups/<mac>_<ts>/`, so you don't have to re-read it — verify it with one more
+read at a safer baud:
+
+```sh
+scripts/backup.sh --verify-existing backups/<mac>_<ts> /dev/ttyUSB0 115200
+```
+
+On a match it writes `flash_full.bin.sha256` (what `restore.sh` checks); on a mismatch it keeps both reads and
+tells you to lower the baud and try again.
+
 ### 1. Flash the probe (serial, once)
 
 The **first** flash must be over serial. The stock firmware has no way to install a third-party image over the
