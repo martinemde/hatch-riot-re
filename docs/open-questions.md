@@ -18,8 +18,9 @@ Possible explanations:
 
 **[O, hw] mostly resolved.** The chip is confirmed **AW9523B** (ID `0x23`), ruling out the AW9110B-numbering
 explanation. Pressing each button one at a time (with the pins forced to input mode) shows the five front buttons
-are **P0_0–P0_4, active-low**: Volume up = P0_0, Brightness = P0_1, Night light = P0_2, Volume down = P0_3, Touch
-ring = P0_4 (first four timestamp-confirmed; P0_4 by elimination).
+use **P0_0–P0_4, active-low**: Volume up = P0_0, Brightness up = P0_1, Night light = P0_2, Volume down = P0_3,
+Brightness down = P0_4. All five re-confirmed 2026-10-12, each pressed twice on its own with isolated timestamps.
+The brightness rocker is two switches; the earlier "P0_4 = touch ring" guess was wrong.
 
 The key to the "overlap": on this unit the expander pins power up as **outputs reading 0x00**, so button presses
 are invisible until the pins are switched to **input** — which is why direct presses registered nothing and the

@@ -59,6 +59,8 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   bool snapshot_();
   bool read_inputs_(uint16_t *value);
   bool guarded_write_(uint8_t reg, uint8_t value);
+  // Write one expander register, retrying once on failure (the bus is flaky). Logs the I2C error code.
+  bool write_reg_(uint8_t reg, uint8_t value);
   bool read_reg_(uint8_t reg, uint8_t *value);
 
   uint32_t poll_interval_{50};

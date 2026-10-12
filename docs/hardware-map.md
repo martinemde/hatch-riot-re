@@ -132,10 +132,13 @@ any press. Physical mapping, by pressing each button one at a time:
 | Button | Expander bit |
 |---|---|
 | Volume up | P0_0 |
-| Brightness | P0_1 |
+| Brightness up | P0_1 |
 | Night light | P0_2 |
 | Volume down | P0_3 |
-| Touch ring | P0_4 *(by elimination; the four above are timestamp-confirmed, P0_4 fired but its individual press wasn't isolated)* |
+| Brightness down | P0_4 |
+
+Re-confirmed 2026-10-12: each button pressed twice on its own; only its own bit moved (`seen_toggling = 001F`). The
+brightness rocker is two switches (up/down); pressing its middle fires both P0_1 and P0_4.
 
 Not yet retested on hardware: `GPIO33` TOUCH (needs the touch-controller enable, expander P1_1) and `GPIO36`
 CONNECT.

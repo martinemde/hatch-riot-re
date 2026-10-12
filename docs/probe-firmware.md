@@ -103,6 +103,14 @@ everything from step 3 on (display, LEDs, audio, touch).
 brownout, giving scattered `--` in dumps. A full power-cycle (not just EN) clears the stuck device. Power the
 board from a supply that can handle the ESP32+PSRAM+radio current spikes to avoid the brownout in the first place.
 
+**Button re-test (2026-10-12):** one attempt hung the main loop right after `Write expander reg 0x04 <- 0xFF`
+(device still pinged, web server dead) on a boot only ~94 s old; a full power-cycle fixed it. After that the bus
+was flaky but no longer hung: `i2c.master: I2C bus is still busy but software timeout detected` appeared once
+while idle, and "all pins to INPUT" failed silently twice before working on the third try. The probe now retries
+each expander write once and logs the I2C error code, and a half-done INPUT switch is reverted properly. Results
+are in [hardware-map.md](hardware-map.md#buttons): all five confirmed, P0_4 is brightness down (not the
+touch ring). In the last run the first CFG0 write NACKed and the retry succeeded.
+
 ### 3. Display (UART only)
 
 1. "Display: all segments", then "Display text" `1234`.

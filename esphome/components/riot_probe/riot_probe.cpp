@@ -78,6 +78,18 @@ void RiotProbe::detect_variant_() {
 
 bool RiotProbe::read_reg_(uint8_t reg, uint8_t *value) { return this->read_byte(reg, value); }
 
+bool RiotProbe::write_reg_(uint8_t reg, uint8_t value) {
+  // Register writes are idempotent, so one retry is safe.
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    i2c::ErrorCode err = this->write_register(reg, &value, 1);
+    if (err == i2c::ERROR_OK)
+      return true;
+    ESP_LOGW(TAG, "Write expander reg 0x%02X <- 0x%02X failed (attempt %d/2, i2c error %d)", reg, value, attempt,
+             (int) err);
+  }
+  return false;
+}
+
 bool RiotProbe::snapshot_() {
   this->snapshot_tried_ = true;
   if (!this->read_reg_(REG_ID, &this->chip_id_)) {
@@ -235,7 +247,7 @@ bool RiotProbe::guarded_write_(uint8_t reg, uint8_t value) {
     return false;
   }
   ESP_LOGI(TAG, "Write expander reg 0x%02X <- 0x%02X", reg, value);
-  return this->write_byte(reg, value);
+  return this->write_reg_(reg, value);
 }
 
 bool RiotProbe::drive_pin(uint8_t pin, bool high) {
@@ -291,11 +303,17 @@ bool RiotProbe::set_all_inputs(bool on) {
   }
   // Making pins inputs never drives the bus, so this is the safe direction. Still gated behind arm and
   // auto-reverted like every other write.
+  if (!this->armed_) {
+    ESP_LOGE(TAG, "Write blocked: not armed");
+    return false;
+  }
+  // Mark modified before writing: if CFG0 lands but CFG1 fails, restore() must still put CFG0 back.
+  this->cfg_modified_ = true;
   if (!this->guarded_write_(REG_CFG0, 0xFF) || !this->guarded_write_(REG_CFG1, 0xFF)) {
+    ESP_LOGE(TAG, "Could not switch expander pins to INPUT; reverting");
     this->restore();
     return false;
   }
-  this->cfg_modified_ = true;
   // Re-baseline inputs so pins settling to their idle (pulled) level aren't counted as button activity.
   this->have_inputs_ = false;
   this->set_timeout("revert", this->write_timeout_, [this]() { this->restore(); });
@@ -309,9 +327,9 @@ void RiotProbe::restore() {
   if (!this->snapshot_ok_ || (this->driven_mask_ == 0 && !this->gcr_modified_ && !this->cfg_modified_))
     return;
   // Go back to inputs first, then restore levels and mode. Restore writes skip the arm check.
-  bool ok = this->write_byte(REG_CFG0, this->snap_cfg_[0]) && this->write_byte(REG_CFG1, this->snap_cfg_[1]) &&
-            this->write_byte(REG_OUT0, this->snap_out_[0]) && this->write_byte(REG_OUT1, this->snap_out_[1]) &&
-            this->write_byte(REG_GCR, this->snap_gcr_);
+  bool ok = this->write_reg_(REG_CFG0, this->snap_cfg_[0]) && this->write_reg_(REG_CFG1, this->snap_cfg_[1]) &&
+            this->write_reg_(REG_OUT0, this->snap_out_[0]) && this->write_reg_(REG_OUT1, this->snap_out_[1]) &&
+            this->write_reg_(REG_GCR, this->snap_gcr_);
   ESP_LOGW(TAG, "Expander restored to boot snapshot: %s", ok ? "ok" : "FAILED");
   if (ok) {
     this->driven_mask_ = 0;
