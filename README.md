@@ -1,11 +1,32 @@
 # hatch-riot-re
 
-Reverse-engineering notes for the Hatch **"riot"** device firmware. The aim is to judge, and eventually build, an
-[ESPHome](https://esphome.io) replacement firmware that controls the same hardware.
+Reverse-engineering notes for the Hatch **"riot"** device firmware, and a working [ESPHome](https://esphome.io)
+replacement firmware for it.
 
-Findings come from **static analysis** of one firmware image, with the hardware map now partly confirmed by a
-[teardown](docs/teardown.md). Behaviour has not been checked on a running device. See
-[docs/open-questions.md](docs/open-questions.md) for what still needs hardware confirmation.
+## Status: ESPHome replacement working ✅
+
+**[`esphome/hatch-rest.yaml`](esphome/hatch-rest.yaml) runs on a Hatch Rest (2nd gen) and every feature was tested
+on the device** (2026-10-12):
+
+| Feature | Result |
+|---|---|
+| RGBW night light (colour, white, brightness) | ✅ |
+| Speaker — **Music Assistant via Sendspin** (auto-discovered), plus Home Assistant media player | ✅ (no start-up pop) |
+| Front buttons (volume ±, brightness ±, night light), touch top, bottom button | ✅ |
+| Toddler lock (disables the buttons, lock icon lit) | ✅ |
+| Clock display (12 h, brightness) | ✅ |
+| Wi-Fi / lock status LEDs | ✅ |
+| OTA updates | ✅ (with bootloader rollback) |
+
+Known gaps: Home Assistant TTS / URL playback depends on HA's ffmpeg proxy (it returned empty streams in testing;
+Music Assistant is unaffected), the status LEDs aren't gated by orientation like stock, the bottom button has no
+hold action, and **RIoT+ (Rest+ 2nd gen) is not supported**. Details and the component list are in
+[docs/esphome-plan.md](docs/esphome-plan.md#replacement-config); flashing and setup are in
+[esphome/README.md](esphome/README.md). Back up the flash with [`scripts/backup.sh`](scripts/backup.sh) first.
+
+The hardware map was worked out by **static analysis** of the stock firmware (Capstone, then Ghidra) and confirmed
+pin by pin on the device with a diagnostic [probe firmware](docs/probe-firmware.md) and a
+[teardown](docs/teardown.md). See [docs/open-questions.md](docs/open-questions.md) for what's still open.
 
 ## Target
 
@@ -21,7 +42,7 @@ Findings come from **static analysis** of one firmware image, with the hardware 
 
 ## Verdict
 
-An ESPHome port is **feasible**. The SoC is a stock ESP32 (D0WD-V3), and its eFuses read **unlocked** on the
+An ESPHome port is **feasible — and now done** (see [Status](#status-esphome-replacement-working-)). The SoC is a stock ESP32 (D0WD-V3), and its eFuses read **unlocked** on the
 checked unit — no flash encryption, no secure boot — so it can be backed up and reflashed over serial. Most
 peripherals map onto ESPHome core components:
 
@@ -29,13 +50,15 @@ peripherals map onto ESPHome core components:
 - **Sound:** I2S to a digital amp with no codec, on `i2s_audio` and `speaker`.
 - **I2C buses** and direct GPIO inputs.
 
-These parts need custom code:
+These parts needed custom code (local components in [`esphome/components/`](esphome/components)):
 
 - **Clock display:** a separate display MCU fed over a TX-only UART with a simple framed protocol. See
   [docs/display-protocol.md](docs/display-protocol.md).
 - **GPIO expander:** Awinic at 0x58, driven by the stock firmware's AW9110B driver (chip ID 0x23, possibly an
-  AW9523B). Enables on P1_0–P1_3, buttons on P0_0–P0_4, touch enable on P0_5.
-- **Accelerometer** used for tap detection.
+  AW9523B). Enables on P1_0–P1_3, buttons on P0_0–P0_4, touch enable on P0_5. Its I2C bus is unreliable with
+  ESPHome's I2C driver, so `hatch_expander` uses its own bit-banged I2C.
+- **Status LEDs:** two red/green bicolour LEDs anti-parallel on GPIO23 / GPIO13 / GPIO32, colour chosen by PWM phase.
+- **Accelerometer** (DA213): orientation only on this unit (stock uses it to show the status LEDs when tipped over).
 - **RIoT+ power path:** a GreenPAK (power latch, battery comparator) and a wireless-power IC. This is the riskiest
   part.
 
@@ -47,15 +70,18 @@ These parts need custom code:
   HBREST2) and the module (ESP32-WROVER-E, PCB antenna).
 - [docs/display-protocol.md](docs/display-protocol.md): clock display UART protocol, font and brightness tables.
 - [docs/firmware-architecture.md](docs/firmware-architecture.md): firmware tasks, components and cloud stack.
-- [docs/esphome-plan.md](docs/esphome-plan.md): component mapping, draft YAML, and a safe flashing procedure.
+- [docs/esphome-plan.md](docs/esphome-plan.md): **the working replacement config**, component mapping, and a safe
+  flashing procedure.
 - [docs/open-questions.md](docs/open-questions.md): unresolved items and how to resolve them on hardware.
 - [docs/methodology.md](docs/methodology.md): how the analysis was done, and how to reproduce it with `tools/`.
 - [docs/probe-firmware.md](docs/probe-firmware.md): **safety model and test plan for the ESPHome probe firmware**.
 
-## Confirming on hardware
+## ESPHome firmware
 
-- `esphome/`: `hatch-riot-probe.yaml`, a read-mostly diagnostic ESPHome firmware (builds with ESPHome 2026.9.1),
-  plus a local `riot_probe` component.
+- [`esphome/hatch-rest.yaml`](esphome/hatch-rest.yaml): **the stock replacement** (builds with ESPHome 2026.9.1),
+  with local components `hatch_expander`, `hatch_display` and `hatch_status_led`.
+- `esphome/hatch-riot-probe.yaml`: a read-mostly diagnostic firmware used to confirm the hardware map, plus a local
+  `riot_probe` component.
 - `scripts/backup.sh`: read-only eFuse check plus a full-flash backup, read twice and verified. **Run this before
   flashing anything.**
 - `scripts/restore.sh`: write a backup back to the device (return to stock).
