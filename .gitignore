@@ -11,6 +11,10 @@ __pycache__/
 
 # ESPHome
 esphome/secrets.yaml
+# Editor swap/backup files (e.g. vim's .secrets.yaml.swp while secrets.yaml is open)
+*.swp
+*.swo
+*~
 esphome/.esphome/
 
 # Device flash backups (contain device certificates / Wi-Fi credentials)
