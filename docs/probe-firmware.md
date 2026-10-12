@@ -9,7 +9,7 @@ features. Its job is to confirm or disprove each item in [hardware-map.md](hardw
 | Risk | Mitigation |
 |---|---|
 | Can't return to stock | `scripts/backup.sh` reads the whole flash **twice**, checks the hashes match, saves the eFuse summary and partition table. `scripts/restore.sh` writes it back and verifies. |
-| Device is locked (flash encryption / secure boot) | `backup.sh` checks the eFuses and **stops** if either is on. Do not flash in that case. |
+| Device is locked (flash encryption / secure boot) | `backup.sh` checks the eFuses and **stops** if either is on. Do not flash in that case. (Checked unit: unlocked — see [open-questions.md #9](open-questions.md).) |
 | Bricking via a wrong strapping state | GPIO0 (I2C SDA) and GPIO5 (LED PWM) are strapping pins, used the same way the stock firmware uses them. Download mode is still available via GPIO0 + EN. |
 | Corrupting the GreenPAK (power/battery logic) | **No code path writes to it.** The firmware's only I2C write path is hard-wired to the expander address 0x58 and registers 0x02–0x05 / 0x11. The I2C scan sends zero-length address probes only. |
 | Writing an unknown chip | Expander writes are refused unless its ID register reads `0x23` (AW9523B). An AW9110B board is read-only. |

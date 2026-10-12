@@ -49,9 +49,13 @@ porting the RIoT+.
 On RIoT (hw type 1), `hal_check_riot_hardware` sets up an LEDC timer and channels from stack structs. These were not
 decoded and may differ from the `LED_task_main` table.
 
-## 9. Flash encryption / Secure Boot v1
+## 9. Flash encryption / Secure Boot — RESOLVED
 
-You can't tell either from an OTA app image. **Resolve:** `espefuse.py summary` on the device.
+`espefuse summary` on the device (via `scripts/backup.sh`) shows the eFuses **unlocked**: `FLASH_CRYPT_CNT=0`
+(no flash encryption), `ABS_DONE_0=False` and `ABS_DONE_1=False` (no secure boot v1/v2), `UART_DOWNLOAD_DIS` and
+`JTAG_DISABLE` both False, and no read/write-protect bits set. So the chip can be read, backed up (plaintext) and
+reflashed over serial, and restored. This was for one unit (MAC `90:38:0c:…`); re-check any other unit before
+flashing it.
 
 ## 10. Which retail product is which variant — RESOLVED
 

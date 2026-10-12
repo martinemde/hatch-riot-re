@@ -21,8 +21,9 @@ Findings come from **static analysis** of one firmware image, with the hardware 
 
 ## Verdict
 
-An ESPHome port is **feasible**. The SoC is a stock ESP32. I found no Secure Boot v2 signature block appended to the
-app image. Most peripherals map onto ESPHome core components:
+An ESPHome port is **feasible**. The SoC is a stock ESP32 (D0WD-V3), and its eFuses read **unlocked** on the
+checked unit — no flash encryption, no secure boot — so it can be backed up and reflashed over serial. Most
+peripherals map onto ESPHome core components:
 
 - **Night light:** 4 PWM channels on `ledc`, used as an RGBW light.
 - **Sound:** I2S to a digital amp with no codec, on `i2s_audio` and `speaker`.

@@ -120,7 +120,8 @@ binary_sensor:
    the boot strap may need care.
 2. **Check eFuses** before writing anything:
    `espefuse.py --port … summary`. Look at `FLASH_CRYPT_CNT` (flash encryption) and `ABS_DONE_0/1` (secure boot).
-   If either is set, stop and reassess.
+   If either is set, stop and reassess. *(On the unit checked so far these were all 0/False — chip unlocked,
+   flashable; see [open-questions.md #9](open-questions.md). Still confirm per unit.)*
 3. **Back up the whole flash:** `esptool.py --port … read_flash 0 ALL hatch_full_backup.bin`. This keeps the
    NVS (device certificates, Wi-Fi, calibration) needed to return to stock.
 4. Read the partition table from the backup (`gen_esp32part.py`) and record the layout.

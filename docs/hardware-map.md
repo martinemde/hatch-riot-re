@@ -16,9 +16,10 @@ V1.5" (2021-06-5). [O, hw]
 
 | Item | Value | Tag / evidence |
 |---|---|---|
-| Chip | ESP32 (classic, dual-core Xtensa LX6) | [O] image header `chip_id 0` |
+| Chip | **ESP32-D0WD-V3** (classic, dual-core Xtensa LX6, rev v3.0, 240 MHz) | [O, hw] `esptool` chip detect; [O] image header `chip_id 0` |
 | Module | **ESP32-WROVER-E-N16R8**, PCB-antenna variant | [O, hw] can marking (photo 11); PSRAM driver + himem use → 8 MB |
-| Flash | 16 MB | [O, hw] `esptool flash-id`; matches image header |
+| Flash | 16 MB, JEDEC `20 40 18` (manufacturer `0x20` = XMC) | [O, hw] `esptool flash-id`; XMC matches the firmware's `Unsupported XMC model` handling |
+| Security | **eFuses unlocked** — flash encryption OFF (`FLASH_CRYPT_CNT=0`), secure boot v1/v2 OFF (`ABS_DONE_0/1=False`), UART download + JTAG enabled, no RD/WR-disable | [O, hw] `espefuse summary` |
 | SDK | ESP-IDF v5.5.4 | [O] app descriptor |
 | Entry | `0x40081b5c` | [O] image header |
 
