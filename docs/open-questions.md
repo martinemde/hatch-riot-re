@@ -33,10 +33,11 @@ probe's "all pins to INPUT" action was required. So the same P0_0–P0_2 pins th
 (LED/SD/amp) are the button *input* bits 0–2; the firmware must be multiplexing their direction, or the enable
 lines are elsewhere than inferred. (Answered above: the enable mapping was misread.)
 
-## 2. RGBW channel order
+## 2. RGBW channel order — RESOLVED
 
-ch0..ch3 = r, g, b, w is inferred from the data order. **Resolve:** light each channel by itself.
-**[O, hw] partial:** ch0 (GPIO5) = **red** confirmed 2026-10-12 (LED enable P1_0 high). ch1–ch3 still to check.
+ch0..ch3 = r, g, b, w was inferred from the data order. **[O, hw] Confirmed 2026-10-12** by lighting each channel
+alone with the LED enable (P1_0) high: ch0 GPIO5 = red, ch1 GPIO18 = green, ch2 GPIO19 = blue, ch3 GPIO4 =
+white.
 
 ## 3. UART parity for the display
 

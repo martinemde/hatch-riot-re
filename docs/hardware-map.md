@@ -185,12 +185,12 @@ CONNECT.
 - **Timer** (`0x3ffbf6e0`): high-speed mode, timer 0, **12-bit** resolution, **19 500 Hz** (`0x4c2c`).
 - **Channels** (`0x3ffbf650` + n×0x24):
 
-| LEDC ch | GPIO | Duty scaling (16-bit input → 12-bit duty) | Effective max |
-|---|---|---|---|
-| 0 | **GPIO5** | `v >> 5` | 50 % |
-| 1 | **GPIO18** | `(v * 3) >> 7` | 37.5 % |
-| 2 | **GPIO19** | `v >> 6` | 25 % |
-| 3 | **GPIO4** | `v >> 6` | 25 % |
+| LEDC ch | GPIO | Colour **[O, hw]** | Duty scaling (16-bit input → 12-bit duty) | Effective max |
+|---|---|---|---|---|
+| 0 | **GPIO5** | red | `v >> 5` | 50 % |
+| 1 | **GPIO18** | green | `(v * 3) >> 7` | 37.5 % |
+| 2 | **GPIO19** | blue | `v >> 6` | 25 % |
+| 3 | **GPIO4** | white | `v >> 6` | 25 % |
 
 The scaling is in `0x4013a330`. It is bypassed when the hardware-info byte equals 5. Channels are faded with
 `ledc_set_fade_with_time`.
@@ -198,16 +198,13 @@ The scaling is in `0x4013a330`. It is bypassed when the hardware-info byte equal
 [I] Channel order is **R, G, B, W**. The LED message's four u16 fields go to ch0..ch3 in order, and the routine
 JSON uses `{"r","g","b","w"}` in that order. The driven *emitters* are confirmed by teardown: a separate LED ring
 board (`SKT1841LWAAW 622042B-U5`) carries **12 RGB LEDs (D1–D12) + 12 white LEDs (W1–W12)** [O, hw] — so R/G/B
-drive the colour LEDs in common and the 4th channel drives the whites. Which LEDC channel is which colour is still
-to be checked on hardware.
+drive the colour LEDs in common and the 4th channel drives the whites. **[O, hw] Confirmed 2026-10-12:** each
+channel lit on its own gives ch0 red, ch1 green, ch2 blue, ch3 white.
 
-The LED driver also needs an expander **LED enable** line set high.
-
-⚠ **[O, hw]** On hardware the four LEDC channels produce **no light** on their own, so an enable line is indeed
-required — but it is **not P0_0**. Driving P0_0 high (the RE's "logical pin 0") while a channel was on did
-nothing, and P0_0 is in fact the volume-up button (see [Buttons](#buttons)). The real LED-enable pin was not
-found; it still needs a sweep of the remaining expander outputs (P0_5–7, P1_0, P1_2–P1_7). See
-[open-questions.md #11](open-questions.md).
+The LED driver also needs the expander **LED enable**, **P1_0** (logical pin 0), set high. **[O, hw]** With it low
+the channels produce no light; with it high each channel lights. Switching P1_0 on makes the expander NACK for
+~10–25 ms (even with every channel off), so writes right after it need spacing — see
+[probe-firmware.md](probe-firmware.md).
 
 RIoT (hw type 1) also sets up LEDC from stack-built configs in `hal_check_riot_hardware` (`0x40139606`). Those were
 not decoded; check whether they override the table above on RIoT.

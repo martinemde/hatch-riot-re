@@ -125,6 +125,14 @@ Ghidra then showed the stock firmware uses the AW9110B driver and never changes 
 boot **without arming** — the one exception to the "no writes unless armed" rule — and makes it the `restore()`
 baseline, so buttons are readable without arming.
 
+**Load switching and write spacing.** Switching a load from the expander (P1_0 LED enable, even with every LED
+channel off) makes the expander NACK for ~10–25 ms; a transaction in that window can also hang the IDF I2C driver
+until a power-cycle. The probe now (a) reads the expander only on GPIO34 INT low, with a 1 s fallback, instead of
+20 Hz polling, (b) runs the bus at 400 kHz like stock, and (c) waits 20 ms after every expander write and retries
+failed writes 3× at 10 ms spacing. With that, LED enable typically succeeds on attempt 3 and the 30 s auto-revert
+restores cleanly with the LEDs lit. The bus is also unreliable for the first ~2 s after boot (first ID read and
+register dump fail, then recover).
+
 ### 3. Display (UART only)
 
 1. "Display: all segments", then "Display text" `1234`.
