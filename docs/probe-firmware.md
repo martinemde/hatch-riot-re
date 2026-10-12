@@ -139,7 +139,10 @@ register dump fail, then recover).
 2. If nothing shows: change "Display UART parity" to `NONE`, then `EVEN`, and retry. Record which one works
    (open question 3).
 3. Step "Display misc bits" 0–7. All digits show `8`; note which colon or dots appear (open question 4).
-4. Step "Display brightness level" 0–15.
+4. Step "Display brightness level" 0–15. **Level 0 is brightest and 15 is off**, and nothing shows until a
+   visible level has been sent, so set one (e.g. 4) first.
+
+**Results (2026-10-12):** parity ODD; bit 0 = colon; brightness inverted as above (open questions 3 and 4).
 
 ### 4. LEDs
 

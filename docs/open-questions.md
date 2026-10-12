@@ -39,14 +39,17 @@ ch0..ch3 = r, g, b, w was inferred from the data order. **[O, hw] Confirmed 2026
 alone with the LED enable (P1_0) high: ch0 GPIO5 = red, ch1 GPIO18 = green, ch2 GPIO19 = blue, ch3 GPIO4 =
 white.
 
-## 3. UART parity for the display
+## 3. UART parity for the display — RESOLVED: ODD
 
-The config struct value is 3, which means `UART_PARITY_ODD`. This assumes the field order in IDF 5.5. **Resolve:**
-try ODD, then NONE.
+The config struct value is 3, which means `UART_PARITY_ODD` (Ghidra confirms the whole `uart_config_t`: 19200,
+8 data bits, parity 3, 1 stop). **[O, hw] 2026-10-12:** the display works with **ODD**. It first looked dead in
+every parity only because no visible brightness had been sent — see
+[display-protocol.md](display-protocol.md#brightness-0x18).
 
-## 4. Display `misc` bits
+## 4. Display `misc` bits — RESOLVED
 
-`M & 0x07` likely drives the colon and indicator dots. **Resolve:** send 0–7 and watch.
+**[O, hw] 2026-10-12:** **bit 0 = the colon** between the hour and minute digits (every odd `M` lit it). Bits 1
+and 2 lit nothing visible on this unit (Rest 2nd gen); they may drive indicators another display variant has.
 
 ## 5. Ambient light sensor
 

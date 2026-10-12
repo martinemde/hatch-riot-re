@@ -32,7 +32,7 @@ Every write is wrapped in `clock_mutex_take` and followed by `uart_wait_tx_done(
 
 - `S0..S3` = `font[ch - 0x20]` for the four characters of the display string. Characters outside `0x20..0xDF`
   give `0x00`.
-- `M` = `misc & 0x07`. [I] These are the colon / indicator dots.
+- `M` = `misc & 0x07`. **[O, hw]** bit 0 = the centre colon; bits 1–2 light nothing on the Rest 2nd gen.
 
 At boot the firmware sends `08 00 00 00 00 00` (blank).
 
@@ -52,6 +52,10 @@ B:     fe 7e be 3e de 5e 9e 1e ee 6e ae 2e ce 4e 8e 0e
 ```
 
 The serial command `TLRdd` (0–15) calls this with `15 - dd`. Brightness is saved in NVS.
+
+**[O, hw] 2026-10-12:** the table runs bright → off: **level 0 (`fe`) is maximum brightness, level 15 (`0e`) is
+off**. That is why `TLRdd` inverts it. After power-up the display MCU shows nothing until it gets a `0x18` frame with
+a visible level: digit frames sent first (in any parity) were accepted but stayed dark.
 
 A second, 21-entry table at `0x3f41a78c` is used by `0x40138078`, which also sends a `0x18` frame. It indexes
 the table with `(x * 21) >> 16`, so it maps a 16-bit level (`x`) onto 21 steps. [I] This is probably brightness
