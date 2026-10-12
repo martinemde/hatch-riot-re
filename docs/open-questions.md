@@ -16,6 +16,10 @@ Possible explanations:
 **Resolve:** on hardware, dump AW9523B registers 0x00/0x01 (inputs) while pressing each button, and toggle bits in
 0x02/0x03 while watching the LEDs, amp and SD power.
 
+**[O, hw] partial:** the chip is confirmed **AW9523B** (ID `0x23`), so the "AW9110B numbers its pins differently"
+explanation is ruled out. At boot, inputs read `P1:P0 = 00 00` with no buttons pressed. The button-press phase of
+the probe plan (press each button, watch which input bit toggles) is still needed to settle the overlap.
+
 ## 2. RGBW channel order
 
 ch0..ch3 = r, g, b, w is inferred from the data order. **Resolve:** light each channel by itself.
@@ -34,9 +38,15 @@ try ODD, then NONE.
 The firmware publishes ALS data to AWS IoT, but the sensor (I2C chip, or ADC through the ULP) was not found.
 **Resolve:** I2C scan, and trace `als_data_send.c` callers.
 
-## 6. Accelerometer bus
+**Partial [O, hw]:** the bus-0 scan found an unexplained device at **0x27** (alongside the expander at 0x58). It
+is either the accelerometer (predicted 0x26 — see #6) or this ALS. Dump 0x27's ID register to tell them apart.
 
-0x26 is known, but which bus it is on was not confirmed. **Resolve:** I2C scan.
+## 6. Accelerometer bus — PARTLY RESOLVED
+
+The firmware uses 8-bit `0x4c` → 7-bit **0x26**. **[O, hw]** the bus-0 scan (GPIO0/GPIO22) showed no device at
+0x26, but one at **0x27** — one address higher, as if the part's SA0 address pin is strapped high. So the accel
+is on **bus 0**, most likely at **0x27** on this unit. Still to confirm: dump 0x27 register 0x01 (part ID) and
+match it to one of the MiraMEMS models; rule out that 0x27 is instead the ALS (#5).
 
 ## 7. RIoT+ power latch
 

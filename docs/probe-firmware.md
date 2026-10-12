@@ -83,6 +83,22 @@ After this, you can leave the serial cable off: later updates go [over the air](
 
 Finish step 2 **before** arming writes. It fills the "seen toggling" guard with the real button pins.
 
+**First boot results (RIoT teardown unit, MAC 90:38:0c:…):**
+
+```
+Variant sense GPIO13=0 GPIO32=0 GPIO23=0 -> RIoT
+I2C bus 0 scan: Found device at 0x27, Found device at 0x58
+Expander ID=0x23 (AW9523B). Boot snapshot: OUT=00 00 CFG=00 00 GCR=00
+Register dump 0x58 [0x10..0x13]: 23 00 FF FF
+Expander inputs initial P1:P0 = 00 00
+WiFi Connected  IP 192.168.20.20  RSSI -51 dB
+```
+
+Confirmed: variant detect, I2C0 pins/expander, AW9523B identity, Wi-Fi/OTA path. Still open from this boot:
+the identity of **0x27** (accel at SA0-high, or the ALS — [open-questions.md #5/#6](open-questions.md)), the
+button-press → input-bit map ([#1](open-questions.md#1-expander-pin-overlap)), and everything from step 3 on
+(display, LEDs, audio, touch).
+
 ### 3. Display (UART only)
 
 1. "Display: all segments", then "Display text" `1234`.
@@ -128,12 +144,16 @@ cd esphome
 OTA uploads use the encryption key from `secrets.yaml` (`ota: platform esphome`, with `encryption:`). The
 web-UI upload endpoint is disabled, so that key is the only way in.
 
-**Rollback safety net.** The firmware is built with `enable_ota_rollback: true`
-(`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`), which pairs with the `safe_mode:` component. A freshly OTA'd image
-must boot and connect once to be marked valid; if it crash-loops or never comes up, the bootloader reverts to
-the previous image on its own. So a bad OTA does **not** force you back to the serial cable — the main reason an
-OTA-only workflow is safe here. (This is the same rollback the stock firmware uses: its logs mention
-"rollback cancelled" and "three-pings validation".)
+**Rollback safety net.** The config sets `enable_ota_rollback: true`
+(`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`) and pairs it with the `safe_mode:` component.
+
+⚠ **Observed on hardware:** the running firmware logs `Bootloader rollback: support unknown` — i.e. ESPHome could
+*not* confirm the bootloader-level rollback is active (the flashed stock bootloader may not have been replaced, or
+does not report the capability). **Do not rely on automatic bootloader rollback.** What *is* confirmed active is
+`safe_mode` at the app level: `Successful after: 60s`, `Invoke after: 10 attempts`, `Duration: 300s`. So a bad OTA
+that crash-loops drops the device into safe mode (fallback AP + OTA listener) rather than bricking it — you
+recover with another OTA, still no serial cable. (The stock firmware's own logs mention "rollback cancelled" and
+"three-pings validation", a separate vendor mechanism.)
 
 ### Why the stock firmware can't OTA this image
 

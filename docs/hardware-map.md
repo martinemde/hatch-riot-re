@@ -44,6 +44,9 @@ Image segments:
 - Pins 13 and 32 high (and 23 high) → **"RIoT+"** (hw type 2). Logs `RIoT Plus hardware found.`
 - Anything else → logs an error and defaults to RIoT+.
 
+**[O, hw]** The probe firmware read `GPIO13=0 GPIO32=0 GPIO23=0 → RIoT` on the teardown unit, confirming both the
+pins and the all-low = RIoT decoding.
+
 [I] On RIoT+ these pins carry the second I2C bus, so the bus's external pull-ups pull them high. The hw type is
 stored at `0x3ffd8844` and read through `0x40139d14`.
 
@@ -60,15 +63,19 @@ stored at `0x3ffd8844` and read through `0x40139d14`.
 All device traffic goes through a single I2C job task (`i2c_task_main`). It sends dummy transactions to recover
 the bus at boot.
 
+**[O, hw]** Probe-firmware scan of bus 0 (GPIO0/GPIO22) on the RIoT teardown unit: devices at **0x27** and
+**0x58**. 0x58 is the expander (ID read `0x23`, below). 0x27 was not predicted — see the accelerometer row and
+[open-questions.md #5/#6](open-questions.md). 0x10/0x60 absent (RIoT+ only), 0x70 absent (display is UART, not I2C).
+
 ### I2C devices
 
 The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed here.
 
 | Device | 7-bit addr | Evidence | Notes |
 |---|---|---|---|
-| GPIO expander **AW9523B** (or **AW9110B**) | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0` | Driver supports both chips (`gpioe_aw9523b_*`, `gpioe_aw9110b_*`); both default to 0x58. Interrupt on GPIO34. |
+| GPIO expander **AW9523B** | **0x58** | [O] `gpioe_init_device` `0x401c7018` stores `0xB0`; check in `0x40139bb8` compares to `0xB0`; **[O, hw]** probe read ID reg `0x10` = `0x23` = AW9523B | Driver also supports AW9110B (`gpioe_aw9523b_*` / `gpioe_aw9110b_*`), but this unit is **AW9523B**. Interrupt on GPIO34. Boot snapshot `OUT=0000 CFG=0000 GCR=00`, inputs `P1:P0=0000`. |
 | GreenPAK (Renesas SLG46xxx) | **0x10** programmed, **0x08** blank | [O] `<greenpak_find>` `0x40117444` uses 8-bit `0x20` / `0x10` | Power latch, battery-voltage comparator (adjustable Vref), charge enable. The firmware compares and can **reprogram the GreenPAK NVM** (`greenpak_program_nvm`). RIoT+ only. |
-| Accelerometer, MiraMEMS DA213 / DA217 / DA260 / MSA301 / MSA311 / MSA321 | **0x26** | [O] `<accelerometer_init>` `0x400ff590` uses 8-bit `0x4c`; soft-reset reg `0x00` ← `0x24` | Model found at runtime. Used for single-tap detection ("top button tap"). |
+| Accelerometer, MiraMEMS DA213 / DA217 / DA260 / MSA301 / MSA311 / MSA321 | **0x26** in firmware; **0x27 seen on bus** | [O] `<accelerometer_init>` `0x400ff590` uses 8-bit `0x4c` (→ 7-bit 0x26); soft-reset reg `0x00` ← `0x24`. **[O, hw]** the only unexplained bus-0 device is at **0x27** (one above 0x26 → SA0 strap high?), unless it is the ALS. | Model found at runtime. Used for single-tap detection ("top button tap"). Dump 0x27 reg 0x01 (part ID) to confirm it is the accelerometer; see [open-questions.md #6](open-questions.md). |
 | Wireless-power IC | **0x60** | [O] `<wireless_power_find>` `0x401dffe8` uses 8-bit `0xC0` | Has status, temperature and output-voltage set. [I] RIoT+ only. |
 | Display MCU (I2C side) | **0x70** | [O] `<GPIO_Clock_IIC_shutdown>` `0x401380f4` writes `0x20` to 8-bit `0xE0` | Only used for shutdown. Display data goes over UART (below). |
 
