@@ -153,8 +153,27 @@ brightness rocker is two switches (up/down); pressing its middle fires both P0_1
 with port 0 push-pull; see [open-questions.md #12](open-questions.md)).
 
 **[O, hw] 2026-10-12:** `GPIO36` "CONNECT" is the **button on the bottom of the unit**: idle high, low while
-pressed (two presses, two clean low pulses; no expander bit moved). [I] It is likely the button behind the
-firmware's "Power button pressed for 2/5 seconds" logs (long press → shutdown in `butt_task_main`); not traced.
+pressed (two presses, two clean low pulses; no expander bit moved).
+
+**[O, Ghidra] What it does:** `GPIO_task1_service` `0x40138b68` turns the mask from `0x40139bb8` into button-event
+IDs (debounced: a bit must match its previous sample before a change is queued):
+
+| Mask bit | Input | Button ID |
+|---|---|---|
+| 0 | P0_0 volume up | 4 |
+| 1 | P0_3 volume down | 3 |
+| 2 | P0_1 brightness up | 1 |
+| 3 | P0_4 brightness down | 2 |
+| 4 | P0_2 night light | 9 |
+| 5 | **GPIO36 bottom button** | **7** |
+| 6 | GPIO33 touch (top) | 5 |
+
+In `butt_task_main` `0x401372b4`, button 7 has no short-press action. **Holding it for more than 2 s logs
+"BT triggered"** and starts Bluetooth setup: it calls `0x4010cde4`, queues a message, switches a mode via
+`0x40103550(1)` and sets a 600 s timeout (`+0x3a8 = 600`) — i.e. the BLE pairing / Wi-Fi provisioning window, hence
+"CONNECT". The same check also fires while volume down (ID 3) is held, as long as brightness down (ID 2) isn't.
+The "Shutting down due to %d" long-press paths are IDs **5 (touch top, >1 s)** and 0xB, not this button; the
+"Power button pressed for 2/5 seconds" strings belong to the RIoT+ `power_task`. Not checked on stock hardware.
 
 ## Direct GPIOs (summary)
 
