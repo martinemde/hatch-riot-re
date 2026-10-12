@@ -110,15 +110,42 @@ void RiotProbe::loop() {
   uint32_t now = millis();
   if (now < this->ready_at_)
     return;
-  if (!this->snapshot_tried_)
-    this->snapshot_ok_ = this->snapshot_();
-  if (!this->snapshot_ok_ || now - this->last_poll_ < this->poll_interval_)
+
+  // Back off geometrically on consecutive I2C failures. A wedged bus (SCL held low after a brownout) makes
+  // every read block for the full timeout; polling that every 50 ms pins the CPU and starves the web server /
+  // API, which looks like the device going offline. Backing off keeps the device responsive and lets it
+  // recover on its own once the bus clears.
+  uint32_t interval = this->poll_interval_;
+  if (this->fail_streak_ > 2) {
+    uint32_t shift = this->fail_streak_ - 2;
+    if (shift > 6)
+      shift = 6;
+    interval = this->poll_interval_ << shift;  // 50 ms → up to ~3.2 s, clamped to 2 s
+    if (interval > 2000)
+      interval = 2000;
+  }
+  if (now - this->last_poll_ < interval)
     return;
   this->last_poll_ = now;
 
-  uint16_t value;
-  if (!this->read_inputs_(&value))
+  // Keep retrying the boot snapshot (throttled by the back-off above) until the bus answers, so a boot with a
+  // briefly-wedged bus still comes good once it clears, instead of disabling the probe for the whole session.
+  if (!this->snapshot_ok_) {
+    this->snapshot_ok_ = this->snapshot_();
+    if (!this->snapshot_ok_) {
+      this->fail_streak_++;
+      return;
+    }
+    this->fail_streak_ = 0;
     return;
+  }
+
+  uint16_t value;
+  if (!this->read_inputs_(&value)) {
+    this->fail_streak_++;
+    return;
+  }
+  this->fail_streak_ = 0;
   if (!this->have_inputs_) {
     this->have_inputs_ = true;
     this->inputs_ = value;
@@ -244,9 +271,29 @@ bool RiotProbe::set_p0_push_pull(bool push_pull) {
   return true;
 }
 
+bool RiotProbe::set_all_inputs(bool on) {
+  if (!on) {
+    this->restore();
+    return true;
+  }
+  // Making pins inputs never drives the bus, so this is the safe direction. Still gated behind arm and
+  // auto-reverted like every other write.
+  if (!this->guarded_write_(REG_CFG0, 0xFF) || !this->guarded_write_(REG_CFG1, 0xFF)) {
+    this->restore();
+    return false;
+  }
+  this->cfg_modified_ = true;
+  // Re-baseline inputs so pins settling to their idle (pulled) level aren't counted as button activity.
+  this->have_inputs_ = false;
+  this->set_timeout("revert", this->write_timeout_, [this]() { this->restore(); });
+  ESP_LOGW(TAG, "All expander pins set to INPUT (auto-revert in %" PRIu32 " ms). Press buttons now.",
+           this->write_timeout_);
+  return true;
+}
+
 void RiotProbe::restore() {
   this->cancel_timeout("revert");
-  if (!this->snapshot_ok_ || (this->driven_mask_ == 0 && !this->gcr_modified_))
+  if (!this->snapshot_ok_ || (this->driven_mask_ == 0 && !this->gcr_modified_ && !this->cfg_modified_))
     return;
   // Go back to inputs first, then restore levels and mode. Restore writes skip the arm check.
   bool ok = this->write_byte(REG_CFG0, this->snap_cfg_[0]) && this->write_byte(REG_CFG1, this->snap_cfg_[1]) &&
@@ -256,6 +303,7 @@ void RiotProbe::restore() {
   if (ok) {
     this->driven_mask_ = 0;
     this->gcr_modified_ = false;
+    this->cfg_modified_ = false;
     // Take a fresh baseline so pins settling back to input level aren't recorded as button activity.
     this->have_inputs_ = false;
   }

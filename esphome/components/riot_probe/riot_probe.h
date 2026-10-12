@@ -36,6 +36,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint16_t driven_mask() const { return this->driven_mask_; }
   bool armed() const { return this->armed_; }
   bool p0_push_pull_modified() const { return this->gcr_modified_; }
+  bool inputs_mode() const { return this->cfg_modified_; }
   // Log `count` registers from `start` of the device at `address` (same bus). Read only.
   void dump(uint8_t address, uint8_t start, uint8_t count);
   void dump_expander();
@@ -46,6 +47,10 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   bool drive_pin(uint8_t pin, bool high);
   // Set AW9523B P0 to push-pull (GCR bit 4), as the stock driver does. Reverted with everything else.
   bool set_p0_push_pull(bool push_pull);
+  // Put every expander pin into INPUT mode (CFG0=CFG1=0xFF) so button presses can be read. This is the
+  // electrically safe direction (an input never drives the bus). Auto-reverts to the boot snapshot like any
+  // other guarded write. `on=false` reverts immediately.
+  bool set_all_inputs(bool on);
   // Restore OUT/CFG/GCR registers to the values read at boot.
   void restore();
 
@@ -60,6 +65,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint32_t write_timeout_{30000};
   uint32_t last_poll_{0};
   uint32_t ready_at_{0};
+  uint32_t fail_streak_{0};  // consecutive I2C failures; drives poll back-off
 
   std::string variant_{"unknown"};
   uint8_t sense_[3]{0, 0, 0};
@@ -79,6 +85,7 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   bool armed_{false};
   uint16_t driven_mask_{0};
   bool gcr_modified_{false};
+  bool cfg_modified_{false};
 };
 
 }  // namespace riot_probe
