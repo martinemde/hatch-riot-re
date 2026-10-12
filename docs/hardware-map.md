@@ -93,7 +93,7 @@ driver's identity table at `0x3f4a8c9e`, which this firmware never uses. "P0"/"P
 |---|---|---|---|
 | 0 | **P1_0** | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0`; **[O, hw]** driving it high lit the ring (ch0 = red) |
 | 1 | **P1_1** | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
-| 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`) |
+| 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`); **[O, hw]** high → chime audible, low → same I2S playback silent |
 | 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back |
 | 4–8 | **P0_0–P0_4** | Buttons (inputs, interrupt enabled) | [O] config table; **[O, hw]** see [Buttons](#buttons) |
 | 9 | **P0_5** | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78` |
@@ -228,7 +228,13 @@ not decoded; check whether they override the table above on RIoT.
 | DIN | −1 |
 
 [I] There is no MCLK and no codec register setup, so this is a digital-input class-D amp (MAX98357A-style).
-`AUD_Codec` / `AUD_SDEC` are ESP-ADF *software* decoders (WAV, MP3). The amp is powered via expander logical pin 2.
+`AUD_Codec` / `AUD_SDEC` are ESP-ADF *software* decoders (WAV, MP3). The amp is enabled by expander logical pin 2
+= **P1_2**.
+
+**[O, hw] Confirmed 2026-10-12** (probe: I2S BCLK 26 / WS 25 / DOUT 21, 16 kHz 16-bit mono, RTTTL at 25 % gain):
+with P1_2 high the chime played audibly (3 plays, clean); ~12 s after the auto-revert set P1_2 low again, the same
+playback ran to completion on I2S but was **silent**. So I2S on these pins reaches the amp, and P1_2 gates it.
+Switching P1_2 on shows the same ~10–25 ms expander NACK window as the LED enable (succeeded on write attempt 3).
 
 Sounds play from the SD card (`/mnt`). Files are downloaded from `images.hatchbaby.com` / `assets.ctfassets.net`
 and cached by path (`audio_filepath_cache`).
