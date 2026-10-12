@@ -49,8 +49,9 @@ logger:
     hatch_expander: DEBUG
     hatch_status_led: DEBUG
     # Temporary, while bringing up audio.
-    speaker_media_player: VERBOSE
-    speaker_media_player.pipeline: VERBOSE
+    speaker_source: VERBOSE
+    sendspin: VERBOSE
+    audio_http: VERBOSE
     audio: VERBOSE
     audio_reader: VERBOSE
     audio_decoder: VERBOSE
@@ -174,15 +175,30 @@ speaker:
     bits_per_sample: 16bit
     sample_rate: 48000
 
+# Music Assistant streams over Sendspin; Home Assistant URLs (TTS, media) come in over HTTP. Both feed one media
+# pipeline on the I2S speaker.
+sendspin:
+  id: sendspin_hub
+
+media_source:
+  - platform: audio_http
+    id: http_source
+  - platform: sendspin
+    id: sendspin_source
+
 media_player:
-  - platform: speaker
+  - platform: speaker_source
     id: player
     name: Speaker
-    announcement_pipeline:
-      speaker: spk
-      num_channels: 1
     volume_initial: 0.3
-    # Amp on for any non-idle state (media and announcements), off 2 s after going idle.
+    media_pipeline:
+      speaker: spk
+      sources:
+        - http_source
+        - sendspin_source
+      num_channels: 1
+    # Amp follows the player: on once the I2S clocks are running (enabling it first caused a loud pop), off 2 s
+    # after going idle.
     on_state:
       - if:
           condition:
@@ -195,7 +211,7 @@ media_player:
                 then:
                   - switch.turn_off: amp
           else:
-            - switch.turn_on: amp
+            - script.execute: amp_on_after_clocks
 
 rtttl:
   id: chime
@@ -336,6 +352,20 @@ number:
       - lambda: id(clock_display).set_brightness((uint8_t) x);
 
 script:
+  # Enable the amp only after the I2S speaker is running, so the amp starts with its clocks present.
+  - id: amp_on_after_clocks
+    mode: single
+    then:
+      - if:
+          condition:
+            switch.is_off: amp
+          then:
+            - wait_until:
+                condition:
+                  speaker.is_playing: spk
+                timeout: 1s
+            - delay: 30ms
+            - switch.turn_on: amp
   - id: show_clock
     then:
       - lambda: |-
@@ -376,9 +406,8 @@ button:
   - platform: template
     name: Test Chime
     on_press:
-      - switch.turn_on: amp
-      - delay: 50ms
       - rtttl.play: "beep:d=8,o=5,b=120:c6,e6,g6"
+      - script.execute: amp_on_after_clocks
       - delay: 3s
       - if:
           condition:

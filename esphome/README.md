@@ -5,7 +5,7 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker, buttons, touch, clock, status LEDs, toddler lock |
+| `hatch-rest.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock, status LEDs, toddler lock |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
 | `riot-plus.yaml` | adds I2C bus 1 (scan only) for RIoT+ boards |
 | `components/riot_probe/` | local external component: variant detect, expander polling, guarded writes, register dumps |
