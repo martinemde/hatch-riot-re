@@ -94,7 +94,7 @@ driver's identity table at `0x3f4a8c9e`, which this firmware never uses. "P0"/"P
 | 0 | **P1_0** | LED driver enable | [O] `<hal_enable_leds>` `0x401398e0`; **[O, hw]** driving it high lit the ring (ch0 = red) |
 | 1 | **P1_1** | SD card power | [O] `_set_enabled` `0x4010e330` ("Turning SD card %s") |
 | 2 | **P1_2** | Audio amplifier enable | [O] `_set_enabled` `0x40104ba8` (`audio_amp`); **[O, hw]** high → chime audible, low → same I2S playback silent |
-| 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back |
+| 3 | **P1_3** | ID_OUT (drives a resistor divider for hardware-ID sensing) | [O, Ghidra] `<_enable_id_out>` `0x40139028` calls `set_level(dev, 3, on + 1)` and reads it back; **[O, hw]** high → GPIO35 0.14 V → 1.67 V |
 | 4–8 | **P0_0–P0_4** | Buttons (inputs, interrupt enabled) | [O] config table; **[O, hw]** see [Buttons](#buttons) |
 | 9 | **P0_5** | Touch controller enable | [O] `<hal_enable_touch_controller>` `0x40139a78`; **[O, hw]** needs P0 push-pull (GCR bit 4): high → touches show on `GPIO33` |
 | — | P0_6, P0_7, P1_4–P1_7 | Not part of the AW9110B model; **never changed by stock** | [O, Ghidra] config is read-modify-write, so they keep their power-on state (output, low) |
@@ -261,6 +261,10 @@ A separate display MCU on **UART1 TX = GPIO27**. See [display-protocol.md](displ
 
 - **RIoT:** `adc1_config_width(12 bit)`. Toggles ID_OUT, reads ADC1_CH7 (GPIO35) with ID_OUT off and on, and
   computes a hardware ID from the two voltages.
+  **[O, hw] 2026-10-12** (this RIoT, 12 dB attenuation, ESPHome-calibrated): ID_OUT (P1_3) **low → GPIO35 =
+  0.14 V**, **high → 1.67 V** (steady over 6 samples; back to 0.14 V after release). 1.67 V is ≈ half of 3.3 V, so the
+  divider is roughly 1:1; 0.14 V is near the ADC's floor at this attenuation (≈ 0 V). How the firmware maps the two
+  readings to an ID was not traced. GPIO39 read a steady 3.00 V throughout.
 - **RIoT+:** reads ADC1_CH3 (GPIO39), then finds and checks the GreenPAK (bus 0). The power task
   (`power_task_*`) handles:
   - battery percentage via the GreenPAK comparator (it moves Vref to bracket the battery voltage);
