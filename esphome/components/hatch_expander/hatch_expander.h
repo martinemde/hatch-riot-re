@@ -14,6 +14,8 @@ class HatchExpander final : public Component,
   void setup() override;
   void loop() override;
   void dump_config() override;
+  // Stop all I2C traffic before an OTA/restart reboot: a reset mid-transaction left the bus stuck until a power cycle.
+  void on_shutdown() override { this->ready_ = false; }
   float get_setup_priority() const override { return setup_priority::IO; }
 
   void set_interrupt_pin(InternalGPIOPin *pin) { this->interrupt_pin_ = pin; }
@@ -43,6 +45,7 @@ class HatchExpander final : public Component,
   uint16_t input_pins_{0};
   uint32_t quiet_until_{0};
   uint32_t last_read_{0};
+  uint32_t read_failures_{0};
   bool ready_{false};
 };
 

@@ -218,6 +218,8 @@ binary_sensor:
     id: btn_volume_up
     name: Volume Up Button
     pin: {hatch_expander: io_exp, number: 0, mode: input, inverted: true}
+    filters:
+      - delayed_on: 30ms
     on_press:
       - if:
           condition: {switch.is_off: toddler_lock}
@@ -227,6 +229,8 @@ binary_sensor:
     id: btn_brightness_up
     name: Brightness Up Button
     pin: {hatch_expander: io_exp, number: 1, mode: input, inverted: true}
+    filters:
+      - delayed_on: 30ms
     on_press:
       - if:
           condition: {switch.is_off: toddler_lock}
@@ -238,6 +242,8 @@ binary_sensor:
     id: btn_night_light
     name: Night Light Button
     pin: {hatch_expander: io_exp, number: 2, mode: input, inverted: true}
+    filters:
+      - delayed_on: 30ms
     on_press:
       - if:
           condition: {switch.is_off: toddler_lock}
@@ -247,6 +253,8 @@ binary_sensor:
     id: btn_volume_down
     name: Volume Down Button
     pin: {hatch_expander: io_exp, number: 3, mode: input, inverted: true}
+    filters:
+      - delayed_on: 30ms
     on_press:
       - if:
           condition: {switch.is_off: toddler_lock}
@@ -256,6 +264,8 @@ binary_sensor:
     id: btn_brightness_down
     name: Brightness Down Button
     pin: {hatch_expander: io_exp, number: 4, mode: input, inverted: true}
+    filters:
+      - delayed_on: 30ms
     on_press:
       - if:
           condition: {switch.is_off: toddler_lock}

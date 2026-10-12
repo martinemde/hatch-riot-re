@@ -1,5 +1,7 @@
 #include "hatch_expander.h"
 
+#include <cinttypes>
+
 #include "esphome/core/log.h"
 
 namespace esphome::hatch_expander {
@@ -85,10 +87,13 @@ bool HatchExpander::digital_read_hw(uint8_t pin) {
   this->last_read_ = millis();
   uint8_t in[2];
   if (!this->read_regs_(REG_IN, in, 2)) {
-    this->status_set_warning();
-    return false;
+    // Keep the last good inputs instead of reporting a failed read as "low": the buttons are active-low, so that
+    // turned bus glitches into phantom presses. Retry on the next loop.
+    if (++this->read_failures_ % 10 == 1)
+      ESP_LOGW(TAG, "Input read failed (%" PRIu32 " so far); keeping last state", this->read_failures_);
+    this->enable_loop();
+    return true;
   }
-  this->status_clear_warning();
   this->inputs_ = in[0] | (uint16_t(in[1]) << 8);
   return true;
 }
