@@ -38,6 +38,23 @@ external_components:
     components: [hatch_expander, hatch_display, hatch_status_led]
 
 logger:
+  level: VERBOSE
+  logs:
+    # Keep everything else at DEBUG; only the audio path is verbose.
+    component: DEBUG
+    sensor: DEBUG
+    api: DEBUG
+    api.connection: DEBUG
+    wifi: DEBUG
+    hatch_expander: DEBUG
+    hatch_status_led: DEBUG
+    # Temporary, while bringing up audio.
+    speaker_media_player: VERBOSE
+    speaker_media_player.pipeline: VERBOSE
+    audio: VERBOSE
+    audio_reader: VERBOSE
+    audio_decoder: VERBOSE
+    i2s_audio.speaker: VERBOSE
 
 api:
   encryption:
@@ -77,21 +94,15 @@ time:
         then:
           - script.execute: show_clock
 
-# ---------------------------------------------------------------- Buses and expander
-i2c:
-  - id: bus_a
-    sda:
-      number: GPIO0
-      ignore_strapping_warning: true
-    scl: GPIO22
-    # Stock: 400 kHz, internal pull-ups off (the board has external ones).
-    frequency: 400kHz
-    sda_pullup_enabled: false
-    scl_pullup_enabled: false
-
+# ---------------------------------------------------------------- Expander
+# The expander gets the I2C pins to itself (bit-banged, see components/hatch_expander): no `i2c:` bus here. The
+# accelerometer (0x27) on the same bus is unused by this config.
 hatch_expander:
   - id: io_exp
+    sda: GPIO0
+    scl: GPIO22
     address: 0x58
+    frequency: 50kHz
     interrupt_pin: GPIO34
 
 # ---------------------------------------------------------------- Night light (LEDC, high-speed group)
@@ -171,15 +182,25 @@ media_player:
       speaker: spk
       num_channels: 1
     volume_initial: 0.3
-    on_play:
-      - switch.turn_on: amp
-    on_idle:
-      - delay: 2s
+    # Amp on for any non-idle state (media and announcements), off 2 s after going idle.
+    on_state:
       - if:
           condition:
             media_player.is_idle: player
           then:
-            - switch.turn_off: amp
+            - delay: 2s
+            - if:
+                condition:
+                  media_player.is_idle: player
+                then:
+                  - switch.turn_off: amp
+          else:
+            - switch.turn_on: amp
+
+rtttl:
+  id: chime
+  speaker: spk
+  gain: 25%
 
 switch:
   # Amp enable (P1_2): on only while playing. Silent when off, confirmed on hardware.
@@ -351,3 +372,16 @@ sensor:
 button:
   - platform: restart
     name: Restart
+  # Same chime the probe played (known to work): checks amp + I2S without the media pipeline.
+  - platform: template
+    name: Test Chime
+    on_press:
+      - switch.turn_on: amp
+      - delay: 50ms
+      - rtttl.play: "beep:d=8,o=5,b=120:c6,e6,g6"
+      - delay: 3s
+      - if:
+          condition:
+            media_player.is_idle: player
+          then:
+            - switch.turn_off: amp

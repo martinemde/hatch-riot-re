@@ -1,23 +1,26 @@
 #pragma once
 
 #include "esphome/components/gpio_expander/cached_gpio.h"
-#include "esphome/components/i2c/i2c.h"
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
 
 namespace esphome::hatch_expander {
 
-class HatchExpander final : public Component,
-                            public i2c::I2CDevice,
-                            public gpio_expander::CachedGpioExpander<uint16_t, 16> {
+class HatchExpander final : public Component, public gpio_expander::CachedGpioExpander<uint16_t, 16> {
  public:
   void setup() override;
   void loop() override;
   void dump_config() override;
-  // Stop all I2C traffic before an OTA/restart reboot: a reset mid-transaction left the bus stuck until a power cycle.
-  void on_shutdown() override { this->ready_ = false; }
+  // Stop all bus traffic before an OTA/restart reboot and leave both lines released.
+  void on_shutdown() override;
   float get_setup_priority() const override { return setup_priority::IO; }
 
+  void set_bus(uint8_t sda, uint8_t scl, uint8_t address, uint32_t frequency) {
+    this->sda_ = sda;
+    this->scl_ = scl;
+    this->address_ = address;
+    this->half_period_us_ = frequency > 0 ? (500000 + frequency - 1) / frequency : 10;
+  }
   void set_interrupt_pin(InternalGPIOPin *pin) { this->interrupt_pin_ = pin; }
   void set_p0_push_pull(bool on) { this->p0_push_pull_ = on; }
 
@@ -32,17 +35,47 @@ class HatchExpander final : public Component,
 
   // Read-modify-write one register byte: only `mask` bits change, so pins outside the stock model keep their
   // power-on state.
-  bool update_reg_(uint8_t reg, uint8_t mask, uint8_t bits);
+  bool try_init_();
+  void apply_output_(uint8_t pin, bool value);
+  void apply_mode_(uint8_t pin, bool input);
+  bool update_reg_(uint8_t reg, uint8_t mask, uint8_t bits, bool verify = true);
   bool write_reg_(uint8_t reg, uint8_t value);
   bool read_regs_(uint8_t reg, uint8_t *data, size_t len);
   void settle_();
+  // Extend the no-transaction window by gap_ms from now.
+  void mark_txn_(uint32_t gap_ms);
+
+  // --- bit-banged I2C master (open-drain: 0 = drive low, 1 = release; external pull-ups) ---
+  void bb_init_();
+  bool bb_clear_();  // 9 clocks until SDA is released, then STOP; true if both lines end high
+  void bb_delay_() const;
+  void bb_sda_(bool high);
+  bool bb_scl_(bool high);  // releasing waits for clock stretching (with a timeout)
+  bool bb_start_();
+  bool bb_stop_();
+  bool bb_write_byte_(uint8_t byte);  // true on ACK
+  bool bb_read_byte_(uint8_t *byte, bool ack);
+  bool bb_write_reg_(uint8_t reg, uint8_t value);
+  bool bb_read_regs_(uint8_t reg, uint8_t *data, size_t len);
+  void bb_fail_(const char *what);
+
+  uint8_t sda_{0};
+  uint8_t scl_{22};
+  uint8_t address_{0x58};
+  uint32_t half_period_us_{10};
+  uint32_t bus_errors_{0};
 
   InternalGPIOPin *interrupt_pin_{nullptr};
   bool p0_push_pull_{true};
-  uint16_t inputs_{0};
+  uint16_t inputs_{0xFFFF};  // all released (buttons are active-low) until a trusted read
   uint8_t out_[2]{0, 0};
   uint8_t cfg_[2]{0, 0};
-  uint16_t input_pins_{0};
+  // What the pins asked for, replayed if the chip only answers after their setup().
+  uint16_t mode_set_{0};
+  uint16_t mode_input_{0};
+  uint16_t out_set_{0};
+  uint16_t out_desired_{0};
+  uint32_t init_attempts_{0};
   uint32_t quiet_until_{0};
   uint32_t last_read_{0};
   uint32_t read_failures_{0};

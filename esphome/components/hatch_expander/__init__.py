@@ -9,12 +9,19 @@ push-pull). Pins are numbered 0-15 = P0_0..P1_7, but only the ten pins the stock
 
 P0_6, P0_7 and P1_4-P1_7 are never changed (releasing P0_6 wedged the I2C bus on hardware). See
 docs/hardware-map.md.
+
+The bus is driven by a built-in bit-banged I2C master, not ESPHome's i2c component: on this board back-to-back
+transactions fail often, and the IDF I2C driver sometimes hangs on a failed transaction (watchdog reset into a still
+stuck bus). Bit-banging has hard timeouts everywhere and clears the bus (9 clocks + STOP) at boot and after errors.
+Nothing else may use GPIO0/GPIO22 (so no `i2c:` bus on these pins).
 """
 from esphome import pins
 import esphome.codegen as cg
-from esphome.components import gpio_expander, i2c
+from esphome.components import gpio_expander
 import esphome.config_validation as cv
 from esphome.const import (
+    CONF_ADDRESS,
+    CONF_FREQUENCY,
     CONF_ID,
     CONF_INPUT,
     CONF_INTERRUPT_PIN,
@@ -22,17 +29,18 @@ from esphome.const import (
     CONF_MODE,
     CONF_NUMBER,
     CONF_OUTPUT,
+    CONF_SCL,
+    CONF_SDA,
 )
 
 AUTO_LOAD = ["gpio_expander"]
-DEPENDENCIES = ["i2c"]
 MULTI_CONF = True
 
 CONF_HATCH_EXPANDER = "hatch_expander"
 CONF_P0_PUSH_PULL = "p0_push_pull"
 
 hatch_expander_ns = cg.esphome_ns.namespace("hatch_expander")
-HatchExpander = hatch_expander_ns.class_("HatchExpander", cg.Component, i2c.I2CDevice)
+HatchExpander = hatch_expander_ns.class_("HatchExpander", cg.Component)
 HatchExpanderPin = hatch_expander_ns.class_(
     "HatchExpanderPin", cg.GPIOPin, cg.Parented.template(HatchExpander)
 )
@@ -40,24 +48,27 @@ HatchExpanderPin = hatch_expander_ns.class_(
 # Pins the stock firmware's AW9110B pin table (0x3f4a8c18) maps to.
 ALLOWED_PINS = (0, 1, 2, 3, 4, 5, 8, 9, 10, 11)
 
-CONFIG_SCHEMA = (
-    cv.Schema(
-        {
-            cv.Required(CONF_ID): cv.declare_id(HatchExpander),
-            cv.Optional(CONF_INTERRUPT_PIN): gpio_expander.validate_interrupt_pin,
-            # Stock sets port 0 push-pull; the touch enable (P0_5) has no pull-up and needs it.
-            cv.Optional(CONF_P0_PUSH_PULL, default=True): cv.boolean,
-        }
-    )
-    .extend(cv.COMPONENT_SCHEMA)
-    .extend(i2c.i2c_device_schema(0x58))
-)
+CONFIG_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_ID): cv.declare_id(HatchExpander),
+        cv.Optional(CONF_SDA, default=0): pins.internal_gpio_output_pin_number,
+        cv.Optional(CONF_SCL, default=22): pins.internal_gpio_output_pin_number,
+        cv.Optional(CONF_ADDRESS, default=0x58): cv.i2c_address,
+        # Bit-banged clock. Slow is fine: the expander only sees a few transactions a second.
+        cv.Optional(CONF_FREQUENCY, default="50kHz"): cv.All(
+            cv.frequency, cv.Range(min=1000, max=100000)
+        ),
+        cv.Optional(CONF_INTERRUPT_PIN): gpio_expander.validate_interrupt_pin,
+        # Stock sets port 0 push-pull; the touch enable (P0_5) has no pull-up and needs it.
+        cv.Optional(CONF_P0_PUSH_PULL, default=True): cv.boolean,
+    }
+).extend(cv.COMPONENT_SCHEMA)
 
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    await i2c.register_i2c_device(var, config)
+    cg.add(var.set_bus(config[CONF_SDA], config[CONF_SCL], config[CONF_ADDRESS], int(config[CONF_FREQUENCY])))
     cg.add(var.set_p0_push_pull(config[CONF_P0_PUSH_PULL]))
     if interrupt_pin := config.get(CONF_INTERRUPT_PIN):
         cg.add(var.set_interrupt_pin(await cg.gpio_pin_expression(interrupt_pin)))

@@ -67,6 +67,15 @@ the bus at boot.
 **0x58**. 0x58 is the expander (ID read `0x23`, below). 0x27 was not predicted — see the accelerometer row and
 [open-questions.md #5/#6](open-questions.md). 0x10/0x60 absent (RIoT+ only), 0x70 absent (display is UART, not I2C).
 
+**[O, hw] Bus reliability (2026-10-12):** bus 0 does not tolerate back-to-back transactions with ESPHome's
+(new IDF `i2c_master`) driver: register dumps failed ~65 % of reads at 400 kHz and ~47 % at 100 kHz, but only ~8 %
+with 5 ms between reads (the failures were then the first read of each burst); a few reads returned wrong data
+(`0xFF`) without an error. A failed transaction sometimes hung the driver (watchdog reset into a still stuck bus,
+power cycle needed), and the boot-time bus scan showed phantom addresses. Spaced polling (1 read/s) was clean. The
+replacement firmware therefore drives the expander with its own **bit-banged I2C** (~50 kHz, timeouts on every
+wait, bus clear at boot and after errors, verified writes, inputs accepted only when two reads agree): 0 bus errors
+and clean OTA restarts since. Root cause on the wires not measured (needs a scope / logic analyser on SDA/SCL).
+
 ### I2C devices
 
 The firmware stores 8-bit (R/W-shifted) addresses. The 7-bit address is listed here.
