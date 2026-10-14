@@ -300,11 +300,15 @@ binary_sensor:
             - light.dim_relative:
                 id: night_light
                 relative_brightness: -10%
-  # Top touch (touch controller output, active high).
+  # Top touch (touch controller output, active high). Debounced: a touch must last 50 ms to count (drops noise
+  # spikes), and short dropouts while held are bridged so a hold isn't split into a tap plus a new touch.
   - platform: gpio
     id: touch
     name: Touch
     pin: GPIO33
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 100ms
   # Bottom "CONNECT" button (active low). Stock: hold >2 s = Bluetooth setup; exposed to Home Assistant here.
   - platform: gpio
     id: btn_bottom
