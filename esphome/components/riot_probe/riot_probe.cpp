@@ -5,7 +5,20 @@
 #include <driver/gpio.h>
 #include <driver/ledc.h>
 #include <driver/sdmmc_host.h>
+#include <esp_heap_caps.h>
 #include <sdmmc_cmd.h>
+#include <strings.h>
+
+#include <cstring>
+#include <memory>
+
+#include "diskio_impl.h"
+#include "ff.h"
+
+#include "esphome/components/audio/audio_decoder.h"
+#include "esphome/components/ring_buffer/ring_buffer.h"
+
+#include <algorithm>
 
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
@@ -60,6 +73,19 @@ uint8_t seg_brightness(uint8_t level) { return BRIGHTNESS[level > 15 ? 15 : leve
 
 void RiotProbe::setup() {
   this->detect_variant_();
+  this->bus_.init(this->sda_pin_, this->scl_pin_, this->frequency_);
+  if (!this->bus_.clear())
+    ESP_LOGW(TAG, "I2C bus not idle at boot (SDA=%d SCL=%d) after clearing", this->bus_.sda_high(),
+             this->bus_.scl_high());
+  // The scan the i2c: bus used to do: expect 0x58 (expander), 0x27 (accel), maybe 0x70 (display).
+  char found[64] = {0};
+  size_t pos = 0;
+  for (uint8_t a = 0x08; a < 0x78; a++) {
+    if (this->bus_.probe(a) && pos < sizeof(found) - 6)
+      pos += snprintf(found + pos, sizeof(found) - pos, " 0x%02X", a);
+    delay(1);
+  }
+  ESP_LOGI(TAG, "I2C scan (bit-banged):%s", pos ? found : " nothing answered");
   // Wait until every bus is up before the first I2C access.
   this->ready_at_ = millis() + 2000;
   this->set_interval("accel", 1000, [this]() {
@@ -520,6 +546,10 @@ void RiotProbe::restore() {
 void RiotProbe::probe_sd() {
   // Same slot setup as stock hatch_sd_init (0x4010e6a4): width 1, internal pull-ups. Default 20 MHz, not stock's
   // 40 MHz, to keep the probe gentle.
+  if (this->sd_busy_.exchange(true)) {
+    ESP_LOGW(TAG, "SD: a listing is still running");
+    return;
+  }
   sdmmc_host_t host = SDMMC_HOST_DEFAULT();
   host.flags = SDMMC_HOST_FLAG_1BIT;
   sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -528,6 +558,7 @@ void RiotProbe::probe_sd() {
   esp_err_t err = sdmmc_host_init();
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "SD: host init failed: %s", esp_err_to_name(err));
+    this->sd_busy_ = false;
     return;
   }
   err = sdmmc_host_init_slot(host.slot, &slot);
@@ -548,11 +579,667 @@ void RiotProbe::probe_sd() {
     ESP_LOGE(TAG, "SD: slot init failed: %s", esp_err_to_name(err));
   }
   sdmmc_host_deinit();
+  this->sd_busy_ = false;
+}
+
+// ---- Read-only FatFs disk driver ----
+// Stands in for IDF's ff_diskio_register_sdmmc. The volume always reports STA_PROTECT, so FatFs refuses any
+// open/mount in a write mode with FR_WRITE_PROTECTED, and the write hook fails as a second line of defence.
+static sdmmc_card_t *s_ro_card = nullptr;
+static uint32_t s_ro_writes_refused = 0;
+
+static DSTATUS ro_disk_status(BYTE pdrv) { return STA_PROTECT; }
+static DRESULT ro_disk_read(BYTE pdrv, BYTE *buff, uint32_t sector, unsigned count) {
+  return sdmmc_read_sectors(s_ro_card, buff, sector, count) == ESP_OK ? RES_OK : RES_ERROR;
+}
+static DRESULT ro_disk_write(BYTE pdrv, const BYTE *buff, uint32_t sector, unsigned count) {
+  s_ro_writes_refused++;
+  return RES_WRPRT;
+}
+static DRESULT ro_disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
+  switch (cmd) {
+    case CTRL_SYNC:
+      return RES_OK;
+    case GET_SECTOR_COUNT:
+      *static_cast<DWORD *>(buff) = s_ro_card->csd.capacity;
+      return RES_OK;
+    case GET_SECTOR_SIZE:
+      *static_cast<WORD *>(buff) = s_ro_card->csd.sector_size;
+      return RES_OK;
+    default:
+      return RES_ERROR;
+  }
+}
+static const ff_diskio_impl_t RO_DISKIO = {ro_disk_status, ro_disk_status, ro_disk_read, ro_disk_write,
+                                           ro_disk_ioctl};
+
+struct SdListState {
+  uint8_t max_depth;
+  uint16_t max_entries;
+  uint16_t entries{0};
+  uint32_t files{0}, dirs{0};
+  uint64_t bytes{0};
+  bool truncated{false};
+};
+
+static bool ends_with_ci(const char *s, const char *suffix) {
+  size_t n = strlen(s), m = strlen(suffix);
+  return n >= m && strcasecmp(s + n - m, suffix) == 0;
+}
+
+struct WavInfo {
+  uint16_t format{0}, channels{0}, bits{0};
+  uint32_t rate{0}, data_size{0};
+};
+
+// Walk a RIFF/WAVE file's chunks (skipping JUNK, LIST, ...) up to the start of the data chunk.
+static bool read_wav_header(FIL *f, WavInfo &w) {
+  uint8_t h[16];
+  UINT got = 0;
+  auto le32 = [](const uint8_t *p) { return uint32_t(p[0] | p[1] << 8 | p[2] << 16 | uint32_t(p[3]) << 24); };
+  if (f_read(f, h, 12, &got) != FR_OK || got != 12 || memcmp(h, "RIFF", 4) != 0 || memcmp(h + 8, "WAVE", 4) != 0)
+    return false;
+  bool have_fmt = false;
+  for (int i = 0; i < 16; i++) {
+    if (f_read(f, h, 8, &got) != FR_OK || got != 8)
+      return false;
+    uint32_t size = le32(h + 4), used = 0;
+    if (memcmp(h, "data", 4) == 0) {
+      w.data_size = size;
+      return have_fmt;
+    }
+    if (memcmp(h, "fmt ", 4) == 0) {
+      uint8_t b[16];
+      if (size < 16 || f_read(f, b, 16, &got) != FR_OK || got != 16)
+        return false;
+      w.format = b[0] | b[1] << 8;
+      w.channels = b[2] | b[3] << 8;
+      w.rate = le32(b + 4);
+      w.bits = b[14] | b[15] << 8;
+      have_fmt = true;
+      used = 16;
+    }
+    if (f_lseek(f, f_tell(f) + (size - used) + (size & 1)) != FR_OK)
+      return false;
+  }
+  return false;
+}
+
+// Log the format from a WAV header.
+static void log_wav_format(const char *path) {
+  FIL f;
+  WavInfo w;
+  if (f_open(&f, path, FA_READ) != FR_OK)
+    return;
+  bool ok = read_wav_header(&f, w);
+  f_close(&f);
+  if (!ok) {
+    ESP_LOGI(TAG, "SD:        not a readable RIFF/WAVE header");
+    return;
+  }
+  ESP_LOGI(TAG, "SD:        WAVE format %u, %u ch, %" PRIu32 " Hz, %u-bit, %" PRIu32 " data bytes", w.format,
+           w.channels, w.rate, w.bits, w.data_size);
+}
+
+// Log a short text file's contents (first 120 bytes, one line).
+static void log_text(const char *path) {
+  FIL f;
+  char buf[121];
+  UINT got = 0;
+  if (f_open(&f, path, FA_READ) != FR_OK)
+    return;
+  FRESULT res = f_read(&f, buf, sizeof(buf) - 1, &got);
+  f_close(&f);
+  if (res != FR_OK)
+    return;
+  buf[got] = 0;
+  for (UINT i = 0; i < got; i++) {
+    if (buf[i] == '\r' || buf[i] == '\n')
+      buf[i] = ' ';
+  }
+  ESP_LOGI(TAG, "SD:        text: '%s'", buf);
+}
+
+// Pace logging below the UART rate. The main loop drains logs from other tasks in one unbounded loop, writing each
+// line to the 115200-baud UART (~11 ms per line). At 5 ms per entry the drain never finished, the main loop stopped
+// feeding the 5 s task watchdog, and the unit reset (seen on hardware 2026-10-14).
+static void log_pace() { vTaskDelay(pdMS_TO_TICKS(30)); }
+
+// List `path` (a buffer of `cap` bytes holding "N:/..." of length `len`), descending while depth < max_depth.
+// Directories are always logged; files only up to max_entries, but every file is counted, so the per-directory
+// and overall totals cover the whole card.
+static FRESULT list_dir(char *path, size_t len, size_t cap, uint8_t depth, SdListState &st) {
+  auto dir = std::make_unique<FF_DIR>();
+  auto fi = std::make_unique<FILINFO>();
+  FRESULT res = f_opendir(dir.get(), path);
+  if (res != FR_OK)
+    return res;
+  uint32_t files = 0, n_mp3 = 0, n_wav = 0;
+  uint64_t bytes = 0;
+  while ((res = f_readdir(dir.get(), fi.get())) == FR_OK && fi->fname[0] != 0) {
+    snprintf(path + len, cap - len, "/%s", fi->fname);
+    const char *shown = path + 2;  // drop the "N:" drive prefix
+    if (fi->fattrib & AM_DIR) {
+      st.dirs++;
+      bool descend = depth + 1 < st.max_depth;
+      ESP_LOGI(TAG, "SD: %-60s  <dir>%s", shown, descend ? "" : "  (not descended)");
+      log_pace();
+      if (descend) {
+        FRESULT sub = list_dir(path, strlen(path), cap, depth + 1, st);
+        if (sub != FR_OK)
+          ESP_LOGW(TAG, "SD: listing %s failed: FatFs error %d", shown, sub);
+      }
+    } else {
+      files++;
+      bytes += fi->fsize;
+      n_mp3 += ends_with_ci(fi->fname, ".mp3");
+      n_wav += ends_with_ci(fi->fname, ".wav");
+      if (st.entries < st.max_entries) {
+        st.entries++;
+        ESP_LOGI(TAG, "SD: %-60s  %10" PRIu32 " B  %04u-%02u-%02u %02u:%02u%s", shown, (uint32_t) fi->fsize,
+                 1980 + (fi->fdate >> 9), (fi->fdate >> 5) & 15, fi->fdate & 31, fi->ftime >> 11,
+                 (fi->ftime >> 5) & 63, (fi->fattrib & (AM_HID | AM_SYS)) ? "  hidden/system" : "");
+        if (ends_with_ci(fi->fname, ".wav")) {
+          log_wav_format(path);
+        } else if (ends_with_ci(fi->fname, ".txt") && fi->fsize <= 512) {
+          log_text(path);
+        }
+        log_pace();
+      } else {
+        st.truncated = true;
+      }
+    }
+    path[len] = 0;
+  }
+  f_closedir(dir.get());
+  st.files += files;
+  st.bytes += bytes;
+  ESP_LOGI(TAG, "SD: [%s] %" PRIu32 " files (%" PRIu32 " mp3, %" PRIu32 " wav), %" PRIu32 " MB", len > 2 ? path + 2 : "/",
+           files, n_mp3, n_wav, (uint32_t) (bytes >> 20));
+  log_pace();
+  return res;
+}
+
+// The card on the stock slot, mounted read-only through RO_DISKIO. Unmounts and releases the host when destroyed.
+class ReadOnlySdVolume {
+ public:
+  ~ReadOnlySdVolume() {
+    if (this->registered_) {
+      f_mount(nullptr, this->drv_, 0);
+      ff_diskio_unregister(this->pdrv_);
+      s_ro_card = nullptr;
+    }
+    heap_caps_free(this->fs_);
+    if (this->host_)
+      sdmmc_host_deinit();
+  }
+
+  bool mount() {
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.flags = SDMMC_HOST_FLAG_1BIT;
+    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot.width = 1;
+    slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    esp_err_t err = sdmmc_host_init();
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "SD: host init failed: %s", esp_err_to_name(err));
+      return false;
+    }
+    this->host_ = true;
+    if ((err = sdmmc_host_init_slot(host.slot, &slot)) != ESP_OK) {
+      ESP_LOGE(TAG, "SD: slot init failed: %s", esp_err_to_name(err));
+      return false;
+    }
+    if ((err = sdmmc_card_init(&host, &this->card_)) != ESP_OK) {
+      ESP_LOGW(TAG, "SD: no card response: %s (is SD power P1_1 on?)", esp_err_to_name(err));
+      return false;
+    }
+    this->fs_ = static_cast<FATFS *>(heap_caps_calloc(1, sizeof(FATFS), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    if (this->fs_ == nullptr || ff_diskio_get_drive(&this->pdrv_) != ESP_OK) {
+      ESP_LOGE(TAG, "SD: no memory or free FatFs drive");
+      return false;
+    }
+    s_ro_card = &this->card_;
+    s_ro_writes_refused = 0;
+    ff_diskio_register(this->pdrv_, &RO_DISKIO);
+    this->drv_[0] = '0' + this->pdrv_;
+    this->drv_[1] = ':';
+    FRESULT res = f_mount(this->fs_, this->drv_, 1);
+    this->registered_ = true;  // FatFs keeps the work area registered even when the mount fails
+    if (res != FR_OK) {
+      ESP_LOGE(TAG, "SD: mount failed: FatFs error %d (13 = no FAT volume, e.g. exFAT)", res);
+      return false;
+    }
+    static const char *const FS_TYPES[] = {"?", "FAT12", "FAT16", "FAT32", "exFAT"};
+    ESP_LOGW(TAG, "SD: mounted read-only: %s, cluster %u KB", FS_TYPES[this->fs_->fs_type <= 4 ? this->fs_->fs_type : 0],
+             this->cluster_bytes() / 1024);
+    return true;
+  }
+
+  const char *drive() const { return this->drv_; }
+  FATFS *fs() const { return this->fs_; }
+  uint32_t cluster_bytes() const { return uint32_t(this->fs_->csize) * this->card_.csd.sector_size; }
+
+ protected:
+  sdmmc_card_t card_{};
+  FATFS *fs_{nullptr};
+  BYTE pdrv_{FF_DRV_NOT_USED};
+  char drv_[3]{};
+  bool host_{false};
+  bool registered_{false};
+};
+
+bool RiotProbe::sd_start_task_(const char *name, TaskFunction_t task) {
+  if (this->sd_busy_.exchange(true)) {
+    ESP_LOGW(TAG, "SD: a probe, listing or playback is already running");
+    return false;
+  }
+  // SD power is expander P1_1 (logical pin 9). Driving it needs arm and auto-reverts after write_timeout, which
+  // also bounds how long the task has before the card loses power.
+  if (!this->drive_pin(9, true)) {
+    ESP_LOGE(TAG, "SD: could not power the card on P1_1 (not armed, or the expander write failed; try again)");
+    this->sd_busy_ = false;
+    return false;
+  }
+  ESP_LOGW(TAG, "SD: powered; %s starts in 1 s (stock settle time) and must finish within %" PRIu32 " ms", name,
+           this->write_timeout_);
+  this->set_timeout("sd_task", 1000, [this, name, task]() {
+    // 12 KB: FatFs plus the MP3 decoder (ESPHome's own decoder task uses 5 KB).
+    if (xTaskCreate(task, name, 12288, this, 2, nullptr) != pdPASS) {
+      ESP_LOGE(TAG, "SD: could not start the %s task", name);
+      this->sd_busy_ = false;
+    }
+  });
+  return true;
+}
+
+void RiotProbe::list_sd(const std::string &root, uint8_t max_depth, uint16_t max_entries) {
+  if (this->sd_busy_) {
+    ESP_LOGW(TAG, "SD: a probe, listing or playback is already running");
+    return;
+  }
+  // Normalise to "" (card root) or "/a/b" without a trailing slash.
+  this->sd_root_ = root;
+  while (!this->sd_root_.empty() && this->sd_root_.back() == '/')
+    this->sd_root_.pop_back();
+  if (!this->sd_root_.empty() && this->sd_root_[0] != '/')
+    this->sd_root_.insert(0, "/");
+  this->sd_max_depth_ = max_depth < 1 ? 1 : max_depth;
+  this->sd_max_entries_ = max_entries;
+  this->sd_start_task_("sd_list", RiotProbe::sd_list_task_);
+}
+
+void RiotProbe::sd_list_task_(void *arg) {
+  auto *self = static_cast<RiotProbe *>(arg);
+  self->sd_list_();
+  self->sd_busy_ = false;
+  vTaskDelete(nullptr);
+}
+
+void RiotProbe::sd_list_() {
+  uint32_t start = millis();
+  {
+    ReadOnlySdVolume vol;
+    if (vol.mount()) {
+      SdListState st{this->sd_max_depth_, this->sd_max_entries_};
+      char path[300];
+      snprintf(path, sizeof(path), "%s%s", vol.drive(), this->sd_root_.c_str());
+      FRESULT res = list_dir(path, strlen(path), sizeof(path), 0, st);
+      if (res != FR_OK)
+        ESP_LOGW(TAG, "SD: listing stopped: FatFs error %d", res);
+      ESP_LOGW(TAG, "SD: total %" PRIu32 " files, %" PRIu32 " dirs, %" PRIu32 " MB%s", st.files, st.dirs,
+               (uint32_t) (st.bytes >> 20),
+               st.truncated ? " (entry limit reached: not every file was logged, totals cover all)" : "");
+
+      DWORD free_clusters = 0;
+      FATFS *fsp = nullptr;
+      if (f_getfree(vol.drive(), &free_clusters, &fsp) == FR_OK) {
+        uint64_t cluster = vol.cluster_bytes();
+        ESP_LOGW(TAG, "SD: volume %" PRIu32 " MB, free %" PRIu32 " MB",
+                 (uint32_t) (((vol.fs()->n_fatent - 2) * cluster) >> 20), (uint32_t) ((free_clusters * cluster) >> 20));
+      }
+    }
+  }
+  ESP_LOGW(TAG, "SD: done in %" PRIu32 " ms; writes refused by the read-only driver: %" PRIu32 " (expected 0)",
+           millis() - start, s_ro_writes_refused);
+}
+
+void RiotProbe::play_sd_file(speaker::Speaker *spk, const std::string &path, float volume, uint16_t max_seconds,
+                            bool mix_to_mono) {
+  if (this->sd_busy_) {
+    ESP_LOGW(TAG, "SD: a probe, listing or playback is already running");
+    return;
+  }
+  if (spk == nullptr || !spk->is_stopped()) {
+    ESP_LOGE(TAG, "SD: speaker missing or busy");
+    return;
+  }
+  this->sd_speaker_ = spk;
+  this->sd_mix_to_mono_ = mix_to_mono;
+  this->sd_play_path_ = path.empty() || path[0] == '/' ? path : "/" + path;
+  // The card and amp power revert write_timeout after the amp is switched on; leave a few seconds to drain.
+  uint32_t window_s = this->write_timeout_ / 1000;
+  this->sd_play_seconds_ = std::min<uint32_t>(max_seconds, window_s > 5 ? window_s - 5 : 1);
+  spk->set_volume(volume);
+  this->sd_start_task_("sd_play", RiotProbe::sd_play_task_);
+}
+
+void RiotProbe::sd_play_task_(void *arg) {
+  auto *self = static_cast<RiotProbe *>(arg);
+  self->sd_play_();
+  // Amp and card off together (restore reverts every driven pin). Runs on the main loop, after the unmount; the
+  // card stays busy until then so a new SD task can't start just before the power goes.
+  self->defer([self]() {
+    self->restore();
+    self->sd_busy_ = false;
+  });
+  vTaskDelete(nullptr);
+}
+
+void RiotProbe::sd_play_() {
+  ReadOnlySdVolume vol;
+  if (!vol.mount())
+    return;
+  std::string full = std::string(vol.drive()) + this->sd_play_path_;
+  FIL f;
+  FRESULT res = f_open(&f, full.c_str(), FA_READ);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "SD: cannot open %s: FatFs error %d", this->sd_play_path_.c_str(), res);
+    return;
+  }
+  if (ends_with_ci(this->sd_play_path_.c_str(), ".mp3")) {
+    this->sd_play_mp3_(&f);
+    f_close(&f);
+    return;
+  }
+  WavInfo w;
+  if (!read_wav_header(&f, w) || w.format != 1 || w.bits != 16 || w.channels < 1 || w.channels > 2) {
+    ESP_LOGE(TAG, "SD: %s is not 16-bit PCM mono/stereo WAV (format %u, %u ch, %u-bit)", this->sd_play_path_.c_str(),
+             w.format, w.channels, w.bits);
+    f_close(&f);
+    return;
+  }
+  const uint32_t frame = 2u * w.channels;
+  const bool mix = w.channels == 2 && this->sd_mix_to_mono_;
+  const uint8_t out_channels = mix ? 1 : w.channels;
+  const uint32_t out_frame = 2u * out_channels;
+  uint32_t data_bytes = std::min<uint32_t>(w.data_size, f_size(&f) - f_tell(&f));
+  const uint32_t audio_ms = uint64_t(data_bytes / frame) * 1000 / w.rate;
+  data_bytes = std::min<uint32_t>(data_bytes, uint32_t(this->sd_play_seconds_) * w.rate * frame);
+  ESP_LOGW(TAG, "SD: playing %s: %u ch, %" PRIu32 " Hz, 16-bit, %" PRIu32 " ms of audio; playing %" PRIu32
+                " ms%s",
+           this->sd_play_path_.c_str(), w.channels, w.rate, audio_ms, uint32_t(uint64_t(data_bytes / frame) * 1000 / w.rate),
+           mix ? " (stereo mixed down to mono)" : (w.channels == 2 ? " (stereo passed through)" : ""));
+
+  speaker::Speaker *spk = this->sd_speaker_;
+  spk->set_audio_stream_info(audio::AudioStreamInfo(16, out_channels, w.rate));
+  static constexpr size_t CHUNK = 4096;  // a multiple of both frame sizes
+  auto *buf = static_cast<uint8_t *>(heap_caps_malloc(CHUNK, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+  if (buf == nullptr) {
+    ESP_LOGE(TAG, "SD: no memory for the read buffer");
+    f_close(&f);
+    return;
+  }
+
+  uint32_t fed = 0, read_total = 0, read_us = 0, start = millis(), last_report = start, last_progress = start;
+  bool amp_requested = false, stalled = false;
+  while (read_total < data_bytes) {
+    UINT got = 0;
+    uint32_t t0 = micros();
+    res = f_read(&f, buf, std::min<uint32_t>(CHUNK, data_bytes - read_total), &got);
+    read_us += micros() - t0;
+    if (res != FR_OK || got == 0) {
+      ESP_LOGE(TAG, "SD: read failed at byte %" PRIu32 ": FatFs error %d", read_total, res);
+      break;
+    }
+    read_total += got;
+    size_t len = got;
+    if (mix) {
+      auto *s16 = reinterpret_cast<int16_t *>(buf);
+      for (size_t i = 0; i < got / 4; i++)
+        s16[i] = int16_t((int32_t(s16[2 * i]) + s16[2 * i + 1]) / 2);
+      len = got / 2;
+    }
+    size_t off = 0;
+    while (off < len) {
+      size_t n = spk->play(buf + off, len - off, pdMS_TO_TICKS(100));
+      off += n;
+      if (n > 0) {
+        last_progress = millis();
+      } else if (millis() - last_progress > 3000) {
+        stalled = true;
+        break;
+      }
+    }
+    fed += off;
+    if (stalled) {
+      ESP_LOGE(TAG, "SD: speaker took no data for 3 s; stopping");
+      break;
+    }
+    // Amp on only once the I2S clocks run: enabling it first caused a loud pop. drive_pin runs on the main loop.
+    if (!amp_requested && spk->is_running()) {
+      amp_requested = true;
+      this->defer([this]() { this->drive_pin(10, true); });
+      ESP_LOGW(TAG, "SD: speaker running; amp (P1_2) on");
+    }
+    if (millis() - last_report >= 5000) {
+      last_report = millis();
+      ESP_LOGI(TAG, "SD: fed %" PRIu32 " ms of audio in %" PRIu32 " ms", uint32_t(uint64_t(fed / out_frame) * 1000 / w.rate),
+               last_report - start);
+    }
+  }
+  f_close(&f);
+  heap_caps_free(buf);
+
+  spk->finish();
+  uint32_t drain_start = millis();
+  while (!spk->is_stopped() && millis() - drain_start < 5000)
+    vTaskDelay(pdMS_TO_TICKS(20));
+  uint32_t wall = millis() - start;
+  ESP_LOGW(TAG,
+           "SD: playback done: %" PRIu32 " ms of audio in %" PRIu32 " ms wall (SD reads %" PRIu32
+           " ms total, %" PRIu32 " KB/s); speaker %s; writes refused: %" PRIu32 " (expected 0)",
+           uint32_t(uint64_t(fed / out_frame) * 1000 / w.rate), wall, read_us / 1000,
+           read_us ? uint32_t(uint64_t(read_total) * 1000 / read_us) : 0, spk->is_stopped() ? "stopped" : "STILL RUNNING",
+           s_ro_writes_refused);
+}
+
+// Decoder sink that sends decoded PCM to the speaker as 16-bit stereo. The speaker's stream info is set from the
+// first decoded frame, before any audio reaches it. Mono is duplicated to both channels: 16-bit mono at 44.1 kHz
+// played at half speed on this I2S speaker (hardware-map.md, "Playback from the card").
+class SpeakerStereoSink : public audio::AudioSinkCallback {
+ public:
+  SpeakerStereoSink(speaker::Speaker *spk, audio::AudioDecoder *decoder) : spk_(spk), decoder_(decoder) {}
+  ~SpeakerStereoSink() { heap_caps_free(this->scratch_); }
+
+  size_t audio_sink_write(uint8_t *data, size_t length, TickType_t ticks_to_wait) override {
+    if (this->failed_)
+      return length;  // drop
+    if (!this->configured_ && !this->configure_())
+      return this->failed_ ? length : 0;
+    if (!this->spk_->is_running()) {
+      // Each play() on a stopped speaker retries start(); if setup keeps failing that floods the log, so give up.
+      if (this->start_wait_ == 0) {
+        this->start_wait_ = millis();
+      } else if (millis() - this->start_wait_ > 2000) {
+        ESP_LOGE(TAG, "SD: speaker did not start within 2 s");
+        this->failed_ = true;
+        return length;
+      }
+    }
+    if (this->channels_ == 2) {
+      size_t n = this->spk_->play(data, length, ticks_to_wait);
+      this->out_bytes_ += n;
+      if (n == 0 && !this->spk_->is_running())
+        vTaskDelay(pdMS_TO_TICKS(100));  // let a start attempt finish before retrying
+      return n;
+    }
+    // Mono: duplicate each sample into L and R, then block until the speaker has taken all of it, so the input
+    // consumed always matches whole samples.
+    size_t samples = std::min<size_t>(length / 2, SCRATCH_SAMPLES);
+    auto *in = reinterpret_cast<const int16_t *>(data);
+    for (size_t i = 0; i < samples; i++)
+      this->scratch_[2 * i] = this->scratch_[2 * i + 1] = in[i];
+    const auto *out = reinterpret_cast<const uint8_t *>(this->scratch_);
+    size_t total = samples * 4, off = 0;
+    uint32_t last = millis();
+    while (off < total) {
+      size_t n = this->spk_->play(out + off, total - off, pdMS_TO_TICKS(50));
+      off += n;
+      if (n > 0) {
+        last = millis();
+      } else if (millis() - last > 3000) {
+        this->failed_ = true;
+        ESP_LOGE(TAG, "SD: speaker took no data for 3 s");
+        break;
+      } else if (!this->spk_->is_running()) {
+        vTaskDelay(pdMS_TO_TICKS(100));  // let a start attempt finish before retrying
+      }
+    }
+    this->out_bytes_ += off;
+    return samples * 2;
+  }
+
+  bool failed() const { return this->failed_; }
+  bool configured() const { return this->configured_; }
+  uint8_t channels() const { return this->channels_; }
+  uint32_t rate() const { return this->rate_; }
+  uint32_t played_ms() const { return this->rate_ ? uint32_t(uint64_t(this->out_bytes_ / 4) * 1000 / this->rate_) : 0; }
+
+ protected:
+  static constexpr size_t SCRATCH_SAMPLES = 1024;
+
+  bool configure_() {
+    const auto &info = this->decoder_->get_audio_stream_info();
+    if (!info.has_value())
+      return false;
+    this->channels_ = info.value().get_channels();
+    this->rate_ = info.value().get_sample_rate();
+    uint8_t bits = info.value().get_bits_per_sample();
+    ESP_LOGW(TAG,
+             "SD: decoded stream: %u ch, %" PRIu32 " Hz, %u-bit%s; internal RAM free %u KB (largest %u KB), "
+             "PSRAM free %u KB",
+             this->channels_, this->rate_, bits, this->channels_ == 1 ? " (sent as stereo)" : "",
+             heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024, heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
+    if (bits != 16 || this->channels_ < 1 || this->channels_ > 2) {
+      ESP_LOGE(TAG, "SD: unsupported decoded format");
+      this->failed_ = true;
+      return false;
+    }
+    if (this->channels_ == 1) {
+      this->scratch_ = static_cast<int16_t *>(heap_caps_malloc(SCRATCH_SAMPLES * 4, MALLOC_CAP_INTERNAL));
+      if (this->scratch_ == nullptr) {
+        ESP_LOGE(TAG, "SD: no memory for the stereo buffer");
+        this->failed_ = true;
+        return false;
+      }
+    }
+    this->spk_->set_audio_stream_info(audio::AudioStreamInfo(16, 2, this->rate_));
+    this->configured_ = true;
+    return true;
+  }
+
+  speaker::Speaker *spk_;
+  audio::AudioDecoder *decoder_;
+  int16_t *scratch_{nullptr};
+  uint64_t out_bytes_{0};
+  uint32_t start_wait_{0};
+  uint32_t rate_{0};
+  uint8_t channels_{0};
+  bool configured_{false};
+  bool failed_{false};
+};
+
+void RiotProbe::sd_play_mp3_(FIL *f) {
+  speaker::Speaker *spk = this->sd_speaker_;
+  const uint32_t limit_ms = uint32_t(this->sd_play_seconds_) * 1000;
+  ESP_LOGW(TAG, "SD: playing %s: MP3, %" PRIu32 " KB; playing up to %" PRIu32 " ms", this->sd_play_path_.c_str(),
+           (uint32_t) (f_size(f) / 1024), limit_ms);
+
+  std::shared_ptr<ring_buffer::RingBuffer> input = ring_buffer::RingBuffer::create(32 * 1024);
+  auto *buf = static_cast<uint8_t *>(heap_caps_malloc(4096, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+  if (input == nullptr || buf == nullptr) {
+    ESP_LOGE(TAG, "SD: no memory for the MP3 buffers");
+    heap_caps_free(buf);
+    return;
+  }
+  std::weak_ptr<ring_buffer::RingBuffer> weak_input = input;
+  audio::AudioDecoder decoder(4096, 8192);
+  SpeakerStereoSink sink(spk, &decoder);
+  if (decoder.add_source(weak_input) != ESP_OK || decoder.add_sink(&sink) != ESP_OK ||
+      decoder.start(audio::AudioFileType::MP3) != ESP_OK) {
+    ESP_LOGE(TAG, "SD: MP3 decoder setup failed");
+    heap_caps_free(buf);
+    return;
+  }
+
+  uint32_t start = millis(), last_report = start, read_us = 0, read_total = 0;
+  size_t pending = 0, off = 0;
+  bool eof = false, amp_requested = false;
+  audio::AudioDecoderState state = audio::AudioDecoderState::DECODING;
+  while (true) {
+    if (!eof && pending == 0) {
+      UINT got = 0;
+      uint32_t t0 = micros();
+      FRESULT res = f_read(f, buf, 4096, &got);
+      read_us += micros() - t0;
+      if (res != FR_OK) {
+        ESP_LOGE(TAG, "SD: read failed at byte %" PRIu32 ": FatFs error %d", read_total, res);
+        eof = true;
+      } else if (got == 0) {
+        eof = true;
+      }
+      read_total += got;
+      pending = got;
+      off = 0;
+    }
+    if (pending > 0) {
+      size_t n = input->write_without_replacement(buf + off, pending, 0);
+      off += n;
+      pending -= n;
+    }
+    state = decoder.decode(eof && pending == 0);
+    if (state != audio::AudioDecoderState::DECODING || sink.failed())
+      break;
+    if (!amp_requested && spk->is_running()) {
+      // Amp on only once the I2S clocks run: enabling it first caused a loud pop. drive_pin runs on the main loop.
+      amp_requested = true;
+      this->defer([this]() { this->drive_pin(10, true); });
+      ESP_LOGW(TAG, "SD: speaker running; amp (P1_2) on");
+    }
+    if (sink.played_ms() >= limit_ms)
+      break;
+    if (millis() - last_report >= 5000) {
+      last_report = millis();
+      ESP_LOGI(TAG, "SD: decoded and fed %" PRIu32 " ms of audio in %" PRIu32 " ms", sink.played_ms(),
+               last_report - start);
+    }
+  }
+  heap_caps_free(buf);
+
+  spk->finish();
+  uint32_t drain_start = millis();
+  while (!spk->is_stopped() && millis() - drain_start < 5000)
+    vTaskDelay(pdMS_TO_TICKS(20));
+  static const char *const STATES[] = {"decoding (stopped at the time limit)", "finished", "FAILED"};
+  ESP_LOGW(TAG,
+           "SD: MP3 playback done: decoder %s; %" PRIu32 " ms of audio in %" PRIu32 " ms wall; read %" PRIu32
+           " KB (SD %" PRIu32 " ms); speaker %s; writes refused: %" PRIu32 " (expected 0)",
+           sink.failed() ? "sink failed" : STATES[uint8_t(state) <= 2 ? uint8_t(state) : 2], sink.played_ms(),
+           millis() - start, read_total / 1024, read_us / 1000, spk->is_stopped() ? "stopped" : "STILL RUNNING",
+           s_ro_writes_refused);
+}
+
+void RiotProbe::on_shutdown() {
+  this->cancel_timeout("revert");
+  this->bus_.release();
 }
 
 void RiotProbe::dump_config() {
   ESP_LOGCONFIG(TAG, "RIoT probe:");
-  LOG_I2C_DEVICE(this);
+  ESP_LOGCONFIG(TAG, "  Bus: bit-banged, SDA GPIO%u, SCL GPIO%u, ~%" PRIu32 " kHz, expander 0x%02X", this->sda_pin_,
+                this->scl_pin_, 500 / this->bus_.half_period_us(), EXPANDER_ADDR);
   ESP_LOGCONFIG(TAG, "  Variant: %s (GPIO13=%u GPIO32=%u GPIO23=%u)", this->variant_.c_str(), this->sense_[0],
                 this->sense_[1], this->sense_[2]);
   ESP_LOGCONFIG(TAG, "  Reads: on GPIO34 INT low, else every %" PRIu32 " ms", this->fallback_interval_);

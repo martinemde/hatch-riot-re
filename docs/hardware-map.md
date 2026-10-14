@@ -286,6 +286,87 @@ respond (`ESP_ERR_INVALID_RESPONSE` after 4 ms). With P1_1 **high** (~18 s settl
 **SDHC/SDXC, CID name `SS16G`, 15193 MB (16 GB)**, OCR `0xC0FF8000`, 20 MHz. Switching P1_1 on caused no expander
 NACKs.
 
+### Card contents
+
+**[O, hw] 2026-10-14** (probe, read-only FAT mount, writes refused at the disk layer, 0 refused): **FAT32**, 32 KB
+clusters, volume 15185 MB, **574 MB free**. All 7.3 GB of stock content is present twice: once at the root and once
+under `/Downloaded/sound machine backup/`.
+
+| Path | Contents |
+|---|---|
+| `/Restore_Sounds/` | 340 mp3, 5479 MB (Restore library: meditations, stories, soundscapes) |
+| `/RestMini_Sounds/` | 134 mp3, 897 MB (Rest Mini library: lullabies, stories, breathing) |
+| `/Sleep_Sounds/` | 128 wav, 826 MB: 122 are **PCM 16-bit stereo 44.1 kHz**; 6 have a `JUNK` chunk before `fmt ` |
+| `/Rest_Sounds/wav/` | 17 wav, **PCM 16-bit mono**, 32 kHz (8 kHz heartbeat, 16 kHz birds/test); 4 are 44-byte `*_zero_len.wav` |
+| `/Rest_Sounds/bin/` | 13 raw sound blobs named `NNN_<name>___<rate>` (the same sounds, headerless) and `restPlus_DFU_9_9_9.bin` (16 MB; a Rest+ image by its name, not examined) |
+| `/Downloaded/` | `RIOT_BrownNoise_CGV3_20240115.wav` (PCM stereo 44.1 kHz), `noSound.wav` (0 B), empty `color/` and `fw/` |
+| `/Downloaded/sound machine backup/` | a full copy of the tree above (641 files, 7267 MB), with `RDL_data.ini` dated 2026-08-01 |
+| `/RDL_data.ini` | 11396 B, the saved routine data (RDL); `/RDL_data_dirty.txt` = `n` |
+| `/Release_date.txt` | `04-12-2021` |
+| `/.tmpwav` | 7.9 MB, dated 2026-10-10: a download's temp file (stock `hatch_sd_finalize_temp_file`) |
+| `/Alarm_Sounds/`, `/Logs/` | empty |
+
+The 574 MB free space is the limit for an
+ESPHome cache unless the backup copy is removed.
+
+### Playback from the card
+
+**[O, hw] 2026-10-14** (probe, WAV read from the read-only mount and fed to the I2S speaker; timed by how fast the
+speaker took data, then **confirmed by ear**: every file sounded right except the mono-mixed 44.1 kHz one, which
+sounded slow as the timing predicted):
+
+| File | Sent to I2S as | Result |
+|---|---|---|
+| `/Rest_Sounds/wav/003_pinknoise16.wav` (mono 32 kHz) | mono 32 kHz | 20.0 s of audio in 20.17 s: real time |
+| `/Rest_Sounds/wav/009_birdschorus16.wav` (mono 16 kHz) | mono 16 kHz | 20.0 s in 20.19 s: real time |
+| `/Sleep_Sounds/Beach_20191223.wav` (stereo 44.1 kHz) | stereo 44.1 kHz | 20.0 s in 20.19 s: real time |
+| same file, and `Wind_Chimes_20191220.wav` (has a `JUNK` chunk) | **mixed to mono** 44.1 kHz | 20.0 s in 40.2 s: **half speed** |
+| `/RestMini_Sounds/TwinkleTwinkleLittleStar_20210218.mp3` | MP3 decoded (ESPHome micro-mp3) to stereo 44.1 kHz | 20.0 s in 20.12 s: real time; 344 KB read |
+| `/Restore_Sounds/Big_Singing_Bowl_3min_20200228.mp3` | same | 20.0 s in 20.24 s: real time; 348 KB read |
+
+So the ESP32 I2S speaker in 16-bit mono runs at half rate at 44.1 kHz but not at 16 or 32 kHz. The cause isn't
+known. One untested idea: 44.1 kHz is the only one of these rates that gives an odd frame count per DMA buffer.
+Stereo plays correctly, and the amp is mono, so it plays one channel or a mix of both depending on how it's
+wired; nobody has listened yet to tell which.
+
+Both MP3s decoded as stereo 44.1 kHz at about 138 kbit/s, so the mono-to-stereo path is untested. MP3 decoding
+needs PSRAM. Without it, the decoder's state and the speaker's 88 KB stereo ring buffer both had to come from
+internal RAM, and the speaker failed to start. With PSRAM on (the same setting as `hatch-rest-base.yaml`), internal
+RAM at playback start was 182 KB free (largest block 108 KB).
+
+Card reads ran at 650–695 KB/s (20 MHz, 1-bit, 4 KB reads through FatFs), about 4× what stereo 44.1 kHz needs.
+Amp enable after the speaker reported running: 0.1 s.
+
+**A crash can leave the unit boot-looping until it is power-cycled.** The first MP3 attempt (no PSRAM) crashed
+while the card was powered on P1_1. Afterwards every firmware boot-looped into safe mode (OTA only, no API),
+including two probe builds and Hatch Rest, which had run on this unit that morning. Unplugging the unit for 10 s
+fixed it, and the same builds then booted normally. So the cause is state outside the ESP32 that survives a
+software reset: the expander, the card or the I2C bus. Which one isn't known; it would need a serial log. Safe mode
+itself still came up, so the hang is in normal component setup, not the bootloader.
+
+Later the same day the probe build **with PSRAM** crashed twice, each time right after a power cycle, on its first
+successful expander write (`OUT1 <- 0x02`, P1_1 on). Each crash left the unit in safe mode again. One crash logged
+`i2c.master: I2C bus is still busy but software timeout detected` first. In the other, all three attempts of the
+same write were NACKed without a crash, and the playback's write 4 s later crashed it. So the card was never
+powered, which rules out its power-on current surge. Before PSRAM, the probe made these writes all day, and failed
+writes were just retried.
+
+The probe writes through ESP-IDF's I2C master driver at 100 kHz. Hatch Rest's `hatch_expander` bit-bangs I2C at
+50 kHz and runs with PSRAM on this unit without trouble: after a power cycle it flashed, booted and was marked
+good. The working guess is that the IDF driver crashes after a bus timeout, and PSRAM makes that more likely. This
+needs a serial log to confirm.
+
+**Fixed in the probe (2026-10-14):** `riot_probe` now bit-bangs I2C itself (`bitbang_i2c.cpp`, ported from
+`hatch_expander`) and has no `i2c:` bus. It clears the bus at boot and releases it on shutdown. With PSRAM on, it
+flashed over Hatch Rest, booted and was marked good. It then powered the card and played all seven test files
+(WAV mono/stereo, the `JUNK`-chunk WAV, two MP3s) back to back with no crash. The half-speed mono run went past
+the 30 s auto-revert. That boot's snapshot had P1_1 as an output held low (Hatch Rest had configured it before the
+reboot), so the revert turned the card off and the read failed cleanly.
+
+**Releasing P1_1 does not cut card power.** The 30 s auto-revert put P1_1 back to an input partway through a
+playback, and reads went on without error; as an input P1_1 reads high. Only driving it low turns the card off
+(as in the 2026-10-12 test above).
+
 ## Accelerometer (DA213)
 
 Read: 6 bytes from reg `0x02` (X, Y, Z little-endian int16), each `/ 4` → 14-bit counts, **4096 counts = 1 g**

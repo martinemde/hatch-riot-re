@@ -35,6 +35,12 @@ esp32:
       # This is the same rollback mechanism the stock firmware relies on.
       enable_ota_rollback: true
 
+# Same as hatch-rest-base.yaml. Without it the MP3 decoder and the speaker's stereo ring buffer both had to fit in
+# internal RAM, and the speaker failed to start (2026-10-14).
+psram:
+  mode: quad
+  speed: 80MHz
+
 external_components:
   - source:
       type: local
@@ -79,25 +85,13 @@ time:
     id: sntp_time
 
 # ---------------------------------------------------------------- I2C (read-mostly)
-i2c:
-  - id: bus_a
-    sda:
-      number: GPIO0
-      ignore_strapping_warning: true
-    scl: GPIO22
-    # Stock uses 400 kHz, but back-to-back reads failed ~65 % at 400 kHz vs ~47 % at 100 kHz on this board.
-    frequency: 100kHz
-    # Stock disables the internal pull-ups (external pull-ups on the board). If the scan finds nothing,
-    # set these to true and retry.
-    sda_pullup_enabled: false
-    scl_pullup_enabled: false
-    # Logs every ACKing address at boot: expect 0x58 (expander), maybe 0x26 (accel), 0x70 (display).
-    scan: true
-
+# I2C (expander 0x58, accelerometer 0x27, display 0x70) is bit-banged by riot_probe on GPIO0 (SDA) / GPIO22 (SCL),
+# like hatch_expander in Hatch Rest. There is no `i2c:` bus: with PSRAM on, ESP-IDF's I2C driver crashed on expander
+# writes and left the unit boot-looping until power-cycled (2026-10-14).
 riot_probe:
   id: probe
-  i2c_id: bus_a
   address: 0x58
+  frequency: 50kHz
   poll_interval: 50ms
   write_timeout: 30s
   # Button pins P0_0-P0_4 to INPUT at boot, as stock does (see docs/probe-firmware.md). Default false.
@@ -216,6 +210,20 @@ script:
 
 text:
   - platform: template
+    id: sd_play_path
+    name: "SD: file to play"
+    mode: text
+    max_length: 120
+    optimistic: true
+    initial_value: "/Rest_Sounds/wav/003_pinknoise16.wav"
+  - platform: template
+    id: sd_list_root
+    name: "SD: list start folder"
+    mode: text
+    max_length: 100
+    optimistic: true
+    initial_value: "/"
+  - platform: template
     name: "Display text (4 chars)"
     mode: text
     max_length: 4
@@ -227,6 +235,14 @@ text:
           txt: !lambda return x;
 
 number:
+  - platform: template
+    id: sd_list_depth
+    name: "SD: list depth"
+    min_value: 1
+    max_value: 6
+    step: 1
+    optimistic: true
+    initial_value: 4
   - platform: template
     name: "Display misc bits (0-7)"
     min_value: 0
@@ -304,6 +320,12 @@ select:
 
 # ---------------------------------------------------------------- Guarded expander writes
 switch:
+  # Off by default: mixed to mono, 44.1 kHz WAVs played at half speed (2026-10-14); stereo passes through at 1x.
+  - platform: template
+    id: sd_mix_mono
+    name: "SD: mix stereo WAV to mono"
+    optimistic: true
+    restore_mode: ALWAYS_OFF
   - platform: template
     name: "Expander writes armed"
     icon: mdi:alert
@@ -369,6 +391,20 @@ button:
     name: "SD: probe card (read-only)"
     on_press:
       - lambda: id(probe).probe_sd();
+  # Mount FAT read-only (writes refused at the disk layer) and log the tree from "SD: list start folder" to
+  # "SD: list depth" levels, 400 files logged (totals count all). Needs arm: it powers the card on P1_1, which
+  # auto-reverts after write_timeout.
+  - platform: template
+    name: "SD: list files (read-only mount)"
+    on_press:
+      - lambda: id(probe).list_sd(id(sd_list_root).state, (uint8_t) id(sd_list_depth).state, 400);
+  # Play "SD: file to play" (16-bit PCM WAV, stereo mixed to mono only if that switch is on; or MP3, decoded and
+  # sent as stereo) from the read-only mount at volume 0.5, up to 20 s. Needs arm: powers the card (P1_1), then the amp (P1_2) once I2S is running;
+  # both revert afterwards.
+  - platform: template
+    name: "SD: play file (read-only)"
+    on_press:
+      - lambda: id(probe).play_sd_file(id(spk), id(sd_play_path).state, 0.5f, 20, id(sd_mix_mono).state);
 
   # Read-only dumps
   - platform: template
@@ -439,6 +475,11 @@ binary_sensor:
       mode: INPUT
 
 sensor:
+  - platform: debug
+    free:
+      name: "Heap free"
+    block:
+      name: "Heap max block"
   - platform: adc
     name: "GPIO35 ADC1_CH7 (hw ID)"
     pin: GPIO35
@@ -455,7 +496,14 @@ sensor:
   - platform: uptime
     name: "Uptime"
 
+# Reset reason and heap, for diagnosing crashes (the SD listing rebooted the unit once).
+debug:
+  update_interval: 5s
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset reason"
   - platform: template
     id: ts_variant
     name: "Board variant"

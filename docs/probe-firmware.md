@@ -162,6 +162,29 @@ step 5 first and retry within the 30 s window. Record the colour of each channel
 7. SD power: "Hypothesis: SD power = P1_1 high", wait ≥1 s, then "SD: probe card (read-only)". It initialises the
    card on the stock slot and logs its type/name/size — card registers only, no filesystem mount and no data I/O.
    Without SD power it logs `SD: no card response`.
+
+   "SD: list files (read-only mount)" (needs arm) powers P1_1 itself, waits 1 s, then mounts the FAT volume and logs
+   the tree from "SD: list start folder" (default `/`) down "SD: list depth" levels (default 4). It logs up to 400
+   files with size and date, and a file count and size for every folder; the totals count every file, logged or
+   not. It also logs WAV formats, the contents
+   of small `.txt` files, and the volume's free space. The disk driver is a read-only stand-in for IDF's SDMMC
+   driver: the volume reports write-protected, so FatFs refuses write opens, and the write hook refuses any write
+   that gets through. The final log line counts refused writes (expect 0). The card loses power when the 30 s
+   auto-revert fires, so a listing still running then fails with read errors; that is harmless because nothing
+   is written. If the expander NACKs the power-on write, it logs `could not power the card`; press again.
+
+   "SD: play file (read-only)" plays "SD: file to play" from the same read-only mount through the probe's I2S
+   speaker at volume 0.5, for up to 20 s. A `.mp3` goes through ESPHome's MP3 decoder and is always sent as stereo
+   (mono is duplicated); this needs the `psram:` block. Anything else is treated as WAV. It powers the card, starts the speaker, switches the amp (P1_2) on once
+   I2S is running (enabling it first pops), then reverts both pins. It handles 16-bit PCM, mono or stereo, and skips
+   `JUNK`/`LIST` chunks. "SD: mix stereo WAV to mono" is off by default: see
+   [hardware-map.md](hardware-map.md#playback-from-the-card). If the unit stops answering the API after a crash
+   and stays in safe mode even after a reflash, unplug it for 10 s (see the same section).
+
+   The listing paces itself at 30 ms per line. Logs from tasks other than the main loop are drained by the main
+   loop in one unbounded loop, each line going to the 115200-baud UART (~11 ms). At 5 ms per line the drain never
+   finished and the **task watchdog reset the unit** (2026-10-14). Any background task here that logs heavily
+   needs the same pacing.
 8. Accelerometer: "Accel: stock setup + start reading", then watch "Accelerometer XYZ (g)" while turning the unit.
    "(upright)" = the stock test (Z < −0.5 g), i.e. sitting normally.
 9. Status LEDs (RIoT): "Status: Wi-Fi window" / "Status: lock window" → off / green / red / amber, driven exactly

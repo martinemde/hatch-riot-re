@@ -1,9 +1,14 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 
-#include "esphome/components/i2c/i2c.h"
+#include "esphome/components/speaker/speaker.h"
+
+#include "ff.h"
 #include "esphome/core/component.h"
+
+#include "bitbang_i2c.h"
 
 namespace esphome {
 namespace riot_probe {
@@ -13,7 +18,7 @@ uint8_t seg_encode(char c);
 // Brightness byte for display level 0..15 (stock table at 0x3f432e0c).
 uint8_t seg_brightness(uint8_t level);
 
-class RiotProbe : public Component, public i2c::I2CDevice {
+class RiotProbe : public Component {
  public:
   // Run before the I2C buses are set up so that variant detection sees the raw pins, as the stock
   // firmware does.
@@ -22,6 +27,15 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   void loop() override;
   void dump_config() override;
 
+  // Bit-banged bus (see bitbang_i2c.h). `address` is the expander's.
+  void set_bus(uint8_t sda, uint8_t scl, uint32_t frequency, uint8_t address) {
+    this->sda_pin_ = sda;
+    this->scl_pin_ = scl;
+    this->frequency_ = frequency;
+    this->address_ = address;
+  }
+  // Release the bus before an OTA/restart reboot, so no chip is left mid-transaction.
+  void on_shutdown() override;
   void set_poll_interval(uint32_t ms) { this->poll_interval_ = ms; }
   void set_write_timeout(uint32_t ms) { this->write_timeout_ = ms; }
   // Set the button pins P0_0-P0_4 to INPUT once at boot, as the stock firmware does, without arming.
@@ -73,8 +87,36 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   // its ID/size. Reads card registers only: no filesystem mount, no data reads or writes. Needs SD power
   // (P1_1 high, then ~1 s to settle, as stock does).
   void probe_sd();
+  // Mount the card's FAT volume read-only and log the directory tree (sizes, dates, WAV formats, small .txt
+  // contents) and free space. Powers the card on P1_1 first, so it needs arm and auto-reverts like drive_pin.
+  // Writes are refused at the disk layer: the volume reports write-protected and the write hook fails.
+  // Runs in its own task. `root` is the folder to start from ("/" = card root); `max_depth` 1 = that folder only;
+  // `max_entries` caps the logged files (totals still count every file).
+  void list_sd(const std::string &root, uint8_t max_depth, uint16_t max_entries);
+  // Play a file from the card through `spk`, read-only like list_sd: 16-bit PCM WAV (mono or stereo; stereo mixed
+  // down when `mix_to_mono`), or MP3 (decoded, always sent as stereo). Powers
+  // the card, starts the speaker, then switches the amp (P1_2) on once I2S runs. Plays at most `max_seconds`, capped
+  // to fit the write_timeout window, then reverts both pins.
+  void play_sd_file(speaker::Speaker *spk, const std::string &path, float volume, uint16_t max_seconds,
+                    bool mix_to_mono = true);
 
  protected:
+  // Same shape as the I2CDevice calls they replace, on the bit-banged bus.
+  i2c::ErrorCode read_register(uint8_t reg, uint8_t *data, size_t len) {
+    return this->bus_.read_regs(this->address_, reg, data, len);
+  }
+  i2c::ErrorCode write_register(uint8_t reg, const uint8_t *data, size_t len) {
+    return this->bus_.write_regs(this->address_, reg, data, len);
+  }
+  void set_i2c_address(uint8_t address) { this->address_ = address; }
+
+  // Power the card, then start `task` 1 s later (stock settle time). False if busy or the power write failed.
+  bool sd_start_task_(const char *name, TaskFunction_t task);
+  static void sd_list_task_(void *arg);
+  static void sd_play_task_(void *arg);
+  void sd_play_();
+  void sd_play_mp3_(FIL *f);
+  void sd_list_();
   void detect_variant_();
   bool snapshot_();
   bool read_inputs_(uint16_t *value);
@@ -96,10 +138,24 @@ class RiotProbe : public Component, public i2c::I2CDevice {
   uint32_t win_errors_[ERR_SLOTS]{};
   uint32_t total_ops_{0};
   uint32_t total_errors_{0};
+  BitBangI2C bus_;
+  uint8_t sda_pin_{0};
+  uint8_t scl_pin_{22};
+  uint32_t frequency_{50000};
+  uint8_t address_{0x58};
   bool buttons_at_boot_{false};
   bool accel_ready_{false};
   bool status_ok_{false};
   int16_t accel_[3]{0, 0, 0};
+
+  std::atomic<bool> sd_busy_{false};  // a probe or listing owns the SDMMC host
+  std::string sd_root_;
+  speaker::Speaker *sd_speaker_{nullptr};
+  std::string sd_play_path_;
+  bool sd_mix_to_mono_{true};
+  uint16_t sd_play_seconds_{20};
+  uint8_t sd_max_depth_{3};
+  uint16_t sd_max_entries_{400};
 
   uint32_t poll_interval_{50};
   uint32_t fallback_interval_{1000};  // idle read rate when GPIO34 INT is high
