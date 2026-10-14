@@ -13,7 +13,7 @@ external_components:
   - source:
       type: local
       path: components
-    components: [hatch_expander, hatch_display, hatch_status_led]
+    components: [hatch_expander, hatch_display, hatch_status_led, sd_cache]
 
 packages:
   hatch_rest: !include hatch-rest-base.yaml

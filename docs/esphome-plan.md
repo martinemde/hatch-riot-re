@@ -12,7 +12,7 @@
 | TOUCH / CONNECT inputs | `binary_sensor: gpio` | none |
 | Clock display | `uart` + lambda (see [display-protocol.md](display-protocol.md)), `time` | low |
 | Tap detection | custom/external component for the MiraMEMS accelerometer | medium |
-| SD card | skip; stream sounds from Home Assistant or embed short clips | n/a |
+| SD card | **done:** optional cache for web audio (`sd_cache`, see [esphome/README.md](../esphome/README.md#sd-card-cache)) | medium |
 | RIoT+ battery/power | custom GreenPAK + wireless-power handling | **high / risky** |
 
 ## Replacement config

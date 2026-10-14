@@ -25,6 +25,7 @@ esphome:
         # The restored brightness / mode / text don't reach the display on their own at boot.
         - lambda: id(clock_display).set_brightness(15 - (uint8_t) id(display_brightness).state);
         - script.execute: update_display
+        - lambda: id(sd_cache_source).set_enabled(id(sd_cache_enabled).state);
 
 esp32:
   board: esp32dev
@@ -169,12 +170,20 @@ speaker:
     bits_per_sample: 16bit
     sample_rate: 48000
 
-# Music Assistant streams over Sendspin; Home Assistant URLs (TTS, media) come in over HTTP. Both feed one media
-# pipeline on the I2S speaker.
+# Music Assistant streams over Sendspin; Home Assistant URLs (TTS, media) come in over HTTP. All feed one media
+# pipeline on the I2S speaker. Web URLs go through sd_cache: with "SD Card Cache" on, repeated sounds play from the
+# card and new ones are saved to it as they play; off (or no card), it just streams. audio_http is the fallback if
+# sd_cache is busy.
 sendspin:
   id: sendspin_hub
 
 media_source:
+  - platform: sd_cache
+    id: sd_cache_source
+    power_pin:
+      hatch_expander: io_exp
+      number: 9
+      mode: output
   - platform: audio_http
     id: http_source
   - platform: sendspin
@@ -186,11 +195,16 @@ media_player:
     name: Speaker
     volume_initial: 0.3
     media_pipeline:
+      # No resampler: under Wi-Fi load it couldn't keep up and audio slowed by ~25-35%. Sources send their native
+      # rate; sd_cache sends mono as stereo, because 16-bit mono at 44.1 kHz plays at half speed on this I2S speaker.
       speaker: spk
       sources:
+        - sd_cache_source
         - http_source
         - sendspin_source
-      num_channels: 1
+      # Ask Home Assistant for the original media URL, not a transcoding-proxy URL: the proxy URL is new on every
+      # play, so nothing would ever be found in the cache. The device decodes MP3, FLAC and WAV itself.
+      format: NONE
     # Amp follows the player: on once the I2S clocks are running (enabling it first caused a loud pop), off 2 s
     # after going idle.
     on_state:
@@ -226,6 +240,17 @@ switch:
       hatch_expander: io_exp
       number: 5
       mode: output
+  # Cache web audio on the SD card. Off: the card is unmounted and powered down, and everything streams.
+  - platform: template
+    id: sd_cache_enabled
+    name: SD Card Cache
+    icon: mdi:sd
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: id(sd_cache_source).set_enabled(true);
+    on_turn_off:
+      - lambda: id(sd_cache_source).set_enabled(false);
   # Toddler lock: ignore the hardware buttons. Shown green in the lock window.
   - platform: template
     id: toddler_lock
@@ -423,7 +448,28 @@ sensor:
     update_interval: 60s
   - platform: uptime
     name: Uptime
+  - platform: template
+    name: SD Cache Used
+    icon: mdi:sd
+    unit_of_measurement: MB
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return id(sd_cache_source).cache_used_mb();
+  - platform: template
+    name: SD Cache Files
+    icon: mdi:file-music
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return id(sd_cache_source).cache_files();
 
 button:
   - platform: restart
     name: Restart
+  - platform: template
+    name: Clear SD Cache
+    icon: mdi:delete-sweep
+    entity_category: config
+    on_press:
+      - lambda: id(sd_cache_source).clear_cache();

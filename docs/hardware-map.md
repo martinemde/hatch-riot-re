@@ -311,6 +311,20 @@ ESPHome cache unless the backup copy is removed.
 
 ### Playback from the card
 
+Hatch Rest uses the card as an optional audio cache (`sd_cache`, see
+[esphome/README.md](../esphome/README.md#sd-card-cache)). The probe tests below are what it builds on.
+
+**[O, hw] 2026-10-14, Hatch Rest playback under Wi-Fi load:**
+
+- **Download speed.** HTTP downloads to the ESP32 ran at 30–300 KB/s and varied a lot between runs. That held on
+  the LAN and over the internet, at -49 dBm, with Wi-Fi power save off (no change), and without Bluetooth (about
+  +10%). The TCP window was 64 KB and LAN ping about 8 ms. OTA uploads reach about 85–95 KB/s.
+- **The `resampler` speaker (44.1→48 kHz) can't keep up while Wi-Fi is receiving.** With it in place, output ran
+  25–35% slow during a download even with megabytes buffered. Without it, output stayed at real time and the
+  download itself got faster (179 → 251 KB/s).
+- **Internal RAM.** With an HTTPS connection open (mbedTLS), the I2S speaker task failed to start unless the
+  playback tasks' stacks were in PSRAM.
+
 **[O, hw] 2026-10-14** (probe, WAV read from the read-only mount and fed to the I2S speaker; timed by how fast the
 speaker took data, then **confirmed by ear**: every file sounded right except the mono-mixed 44.1 kHz one, which
 sounded slow as the timing predicted):

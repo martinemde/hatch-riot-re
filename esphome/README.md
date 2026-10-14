@@ -7,7 +7,7 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv). Shared base; no `external_components` |
+| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache. Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
@@ -17,6 +17,7 @@
 | `components/hatch_expander/` | GPIO expander at 0x58 as ESPHome pins (stock AW9110B pin model, bit-banged I2C, verified writes, INT-driven reads) |
 | `components/hatch_display/` | clock display over UART1 (stock font, colon, inverted brightness) |
 | `components/hatch_status_led/` | Wi-Fi / lock bicolour status LEDs (off / green / red / amber, driven like stock) |
+| `components/sd_cache/` | media source that caches web audio on the SD card (see [below](#sd-card-cache)) |
 | `secrets.yaml.example` | copy to `secrets.yaml` |
 
 ## Build
@@ -54,6 +55,44 @@ package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to foll
 
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):
 back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image.
+
+## SD card cache
+
+The **SD Card Cache** switch (off by default) keeps web audio on the Hatch's SD card. With it on:
+
+- A URL played before plays from the card: no download, and it starts in about 0.1 s.
+- A new URL streams as usual and is saved to the card while it plays. It's kept only if the whole file downloaded;
+  a sound stopped early isn't cached.
+- Everything goes in `/esphome_cache` on the card. The stock sound library and other files are never written or
+  deleted, so the stock firmware still works if you go back to it.
+- When the cache passes 400 MB (`max_size_mb`), the least recently played files are deleted. 50 MB of the card is
+  always left free (`min_free_mb`). Files over 100 MB (`max_file_mb`) and endless streams play without being cached.
+- Text-to-speech URLs are never cached (`exclude`), since each message is new.
+- Home Assistant's `authSig` URL parameter is ignored when matching, because it changes on every request
+  (`ignore_query_params`).
+
+With it off, the card is unmounted and powered down. Web audio still goes through `sd_cache`, which then only
+streams. **SD Cache Used** / **SD Cache Files** show the size, and **Clear SD Cache** empties it.
+
+**Slow downloads.** This unit's Wi-Fi delivered 30–300 KB/s to the ESP32 (LAN or internet, with a -49 dBm signal),
+and a 44.1 kHz stereo WAV needs 176 KB/s. When the download is slower than the audio, `sd_cache` waits before
+playing until enough is buffered for the rest of the file to arrive in time (up to 2 MB, in PSRAM). It measures the
+speed for 3 s and plans with 85% of it. If the download falls behind anyway, it pauses once to rebuffer instead of
+stuttering. Compressed files (MP3, FLAC) rarely need it, and cached plays never do.
+
+For caching to work, the media pipeline asks Home Assistant for **original media URLs** (`format: NONE`) instead of
+its FLAC transcoding proxy, whose URL is new on every play. The device decodes MP3, FLAC and WAV itself. Other
+formats (AAC, Ogg Vorbis) no longer play through Home Assistant media; Music Assistant (Sendspin) is unaffected.
+There is no `resampler` stage: while Wi-Fi was busy it couldn't keep up, and audio slowed by 25–35%. Instead
+`sd_cache` sends mono audio as stereo, because the I2S speaker plays 16-bit mono at 44.1 kHz at half speed.
+`audio_http` stays as the fallback source and doesn't do this, but it only plays when `sd_cache` is busy.
+
+The stock card had 574 MB free, mostly taken by a second copy of the stock sound library under
+`/Downloaded/sound machine backup/` (see [hardware-map.md](../docs/hardware-map.md#card-contents)).
+
+> [!NOTE]
+> `hatch-rest-builder.yaml` is pinned to v1.2, which predates the cache. When it moves to a release that includes it,
+> add `sd_cache` to its `components:` list.
 
 ## Bluetooth
 
