@@ -125,10 +125,18 @@ packages:
   bluetooth_proxy: github://w1ll1am23/hatch-riot-re/esphome/bluetooth-proxy.yaml@<ref>
 ```
 
-> **Known issue: audio stutters with the proxy on.** The ESP32 has one 2.4 GHz radio shared by Wi-Fi and Bluetooth,
-> and BLE scanning takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome 2026.9.1, default scan
-> settings): streamed audio (Sendspin / Home Assistant media) stutters. Only enable the proxy on a unit you don't
-> use as a speaker. That's why it's off by default.
+> **Known issue: Music Assistant (Sendspin) audio stutters with the proxy on.** The ESP32 has one 2.4 GHz radio
+> shared by Wi-Fi and Bluetooth, and BLE scanning takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome
+> 2026.9.1, default scan settings, with the [SD card cache](#sd-card-cache)):
+>
+> | Source | With the proxy on |
+> |---|---|
+> | Cached sound (played from the SD card) | plays fine |
+> | Home Assistant media (HTTP, through `sd_cache`) | plays fine; `sd_cache` buffers ahead |
+> | Music Assistant via Sendspin | **stutters** |
+>
+> Before the SD cache was added, streamed audio stuttered. So the proxy is fine if the Hatch plays Home Assistant
+> media (white noise, sounds), but not if you use it as a Music Assistant speaker. That's why it's off by default.
 
 Scan settings are left at ESPHome's defaults on purpose. Don't copy the 1100 ms
 `interval`/`window` from older proxy guides: long scan windows can drop Wi-Fi on some access points.

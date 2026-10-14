@@ -6,8 +6,10 @@
 #   (Builder: github://w1ll1am23/hatch-riot-re/esphome/bluetooth-proxy.yaml@<ref>)
 #
 # Off by default: the ESP32 has one 2.4 GHz radio shared between Wi-Fi and Bluetooth, and continuous BLE scanning
-# takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome 2026.9.1, default scan settings): streamed
-# audio STUTTERS with the proxy on. Only enable it on a unit you don't use as a speaker.
+# takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome 2026.9.1, default scan settings): Music
+# Assistant (Sendspin) audio STUTTERS with the proxy on. Home Assistant media plays fine through sd_cache (cached
+# sounds from the card, new ones buffered ahead); before the cache, streamed audio stuttered. Don't enable it
+# on a unit you use as a Music Assistant speaker.
 
 # Scan parameters left at ESPHome's defaults: they already share the radio with Wi-Fi via the coexistence arbiter.
 # Don't copy the old 1100 ms interval/window from older proxy configs; long windows drop Wi-Fi on some APs.
