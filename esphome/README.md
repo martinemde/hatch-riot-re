@@ -7,10 +7,11 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock. Shared base; no `external_components` |
+| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv). Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
+| `bluetooth-proxy.yaml` | optional add-on: Home Assistant Bluetooth proxy (see [below](#bluetooth)) |
 | `riot-plus.yaml` | adds I2C bus 1 (scan only) for RIoT+ boards |
 | `components/riot_probe/` | local external component: variant detect, expander polling, guarded writes, register dumps |
 | `components/hatch_expander/` | GPIO expander at 0x58 as ESPHome pins (stock AW9110B pin model, bit-banged I2C, verified writes, INT-driven reads) |
@@ -54,3 +55,41 @@ package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to foll
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):
 back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image.
 
+## Bluetooth
+
+### Wi-Fi setup over Bluetooth (Improv)
+
+Built into the base config. When the Hatch can't join Wi-Fi (new network, changed password), it advertises over
+Bluetooth, and the Home Assistant companion app or [improv-wifi.com](https://www.improv-wifi.com/) can send it new
+credentials. **Hold the bottom CONNECT button** to authorize, like the stock pairing flow; authorization lasts one
+minute. It's idle while Wi-Fi is connected. The fallback access point (`Hatch Rest Fallback`) still works as before.
+
+### Bluetooth proxy (optional)
+
+[`bluetooth-proxy.yaml`](bluetooth-proxy.yaml) makes the Hatch a
+[Bluetooth proxy](https://esphome.io/components/bluetooth_proxy/) for Home Assistant, including active connections
+(locks, sensors that need GATT reads). Add it as a second package.
+
+Local build (`hatch-rest.yaml`):
+
+```yaml
+packages:
+  hatch_rest: !include hatch-rest-base.yaml
+  bluetooth_proxy: !include bluetooth-proxy.yaml
+```
+
+ESPHome Builder (`hatch-rest-builder.yaml`), with the same `@<ref>` as the base package:
+
+```yaml
+packages:
+  hatch_rest: github://w1ll1am23/hatch-riot-re/esphome/hatch-rest-base.yaml@<ref>
+  bluetooth_proxy: github://w1ll1am23/hatch-riot-re/esphome/bluetooth-proxy.yaml@<ref>
+```
+
+> **Known issue: audio stutters with the proxy on.** The ESP32 has one 2.4 GHz radio shared by Wi-Fi and Bluetooth,
+> and BLE scanning takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome 2026.9.1, default scan
+> settings): streamed audio (Sendspin / Home Assistant media) stutters. Only enable the proxy on a unit you don't
+> use as a speaker. That's why it's off by default.
+
+Scan settings are left at ESPHome's defaults on purpose. Don't copy the 1100 ms
+`interval`/`window` from older proxy guides: long scan windows can drop Wi-Fi on some access points.

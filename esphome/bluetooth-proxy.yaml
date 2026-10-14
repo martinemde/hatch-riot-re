@@ -1,0 +1,18 @@
+# Optional: Home Assistant Bluetooth proxy. Include it from the main file to turn the Hatch into a BLE proxy:
+#
+#   packages:
+#     hatch_rest: ...
+#     bluetooth_proxy: !include bluetooth-proxy.yaml
+#   (Builder: github://w1ll1am23/hatch-riot-re/esphome/bluetooth-proxy.yaml@<ref>)
+#
+# Off by default: the ESP32 has one 2.4 GHz radio shared between Wi-Fi and Bluetooth, and continuous BLE scanning
+# takes airtime from Wi-Fi. Tested on hardware (2026-10-14, ESPHome 2026.9.1, default scan settings): streamed
+# audio STUTTERS with the proxy on. Only enable it on a unit you don't use as a speaker.
+
+# Scan parameters left at ESPHome's defaults: they already share the radio with Wi-Fi via the coexistence arbiter.
+# Don't copy the old 1100 ms interval/window from older proxy configs; long windows drop Wi-Fi on some APs.
+esp32_ble_tracker:
+
+bluetooth_proxy:
+  # Active connections (e.g. locks, thermometers that need GATT reads), not just passive advertisements.
+  active: true

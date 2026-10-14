@@ -69,6 +69,16 @@ wifi:
 
 captive_portal:
 
+# Bluetooth Wi-Fi setup (Improv), the stock "hold CONNECT" flow: when the device can't join Wi-Fi it advertises
+# over BLE, and the Home Assistant app / improv-wifi.com can send it new credentials. Holding the bottom CONNECT
+# button authorizes it for a minute. Only active while Wi-Fi is down, so it costs nothing in normal use.
+esp32_ble:
+  # Keep the Bluetooth host's buffers out of internal RAM (shared with Wi-Fi and the audio pipeline).
+  use_psram: true
+
+esp32_improv:
+  authorizer: btn_bottom
+
 time:
   - platform: homeassistant
     id: ha_time
