@@ -7,7 +7,7 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache. Shared base; no `external_components` |
+| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache, repeat. Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
@@ -18,6 +18,7 @@
 | `components/hatch_display/` | clock display over UART1 (stock font, colon, inverted brightness) |
 | `components/hatch_status_led/` | Wi-Fi / lock bicolour status LEDs (off / green / red / amber, driven like stock) |
 | `components/sd_cache/` | media source that caches web audio on the SD card (see [below](#sd-card-cache)) |
+| `components/speaker_source/` | ESPHome 2026.9.1's speaker media player, patched to offer repeat (see [below](#repeat)) |
 | `secrets.yaml.example` | copy to `secrets.yaml` |
 
 ## Build
@@ -89,6 +90,23 @@ There is no `resampler` stage: while Wi-Fi was busy it couldn't keep up, and aud
 
 The stock card had 574 MB free, mostly taken by a second copy of the stock sound library under
 `/Downloaded/sound machine backup/` (see [hardware-map.md](../docs/hardware-map.md#card-contents)).
+
+## Repeat
+
+The **Speaker** media player offers repeat (one / off) in Home Assistant, from the media player card or
+`media_player.repeat_set`. "All" isn't supported: Home Assistant's ESPHome integration only sends one and off. Repeat
+resets to off when the device restarts.
+
+Web audio (which goes through `sd_cache`) loops without a gap: `sd_cache` starts the file again inside its playback
+task, so the speaker keeps running. The decoder runs about half a second ahead of the speaker, which covers the
+restart. WAV and FLAC loop seamlessly. MP3 may keep a short gap (about 25–50 ms) from the encoder's padding. A loop
+that has to download the file again may pause briefly: the first one after a new download if the file isn't on the
+card yet, and every one with the cache off. Audio from the `audio_http` fallback repeats by playing again, with a
+short gap.
+
+It needs `components/speaker_source/`, a copy of ESPHome's player: the stock one has repeat but doesn't offer it to
+Home Assistant, and can't loop a file without stopping the speaker. Re-copy it from the ESPHome release when
+upgrading ESPHome, and keep the changes marked `Hatch:`.
 
 ## Bluetooth
 
