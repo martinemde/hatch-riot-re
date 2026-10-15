@@ -50,7 +50,7 @@ package) and the custom components from this GitHub repo, so the Builder only ho
 3. **Install → Wirelessly.** Updates keep bootloader rollback.
 
 Customise by adding keys after `packages:` — they override the base (for example `substitutions:`, or a `wifi:` block
-with `manual_ip:` for a static address). The file is pinned to release **v1.3**; to update, change the tag in both the
+with `manual_ip:` for a static address). The file is pinned to release **v1.4**; to update, change the tag in both the
 package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to follow every push).
 
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):
