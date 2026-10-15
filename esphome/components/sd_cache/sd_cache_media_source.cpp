@@ -475,6 +475,14 @@ void SdCacheMediaSource::handle_command(media_source::MediaSourceCommand command
       this->set_state_(media_source::MediaSourceState::PLAYING);
       this->paused_ = false;
       break;
+    // From the player (speaker_source patch). Also applies to a playback already running.
+    case media_source::MediaSourceCommand::REPEAT_ONE:
+      this->repeat_ = true;
+      break;
+    case media_source::MediaSourceCommand::REPEAT_OFF:
+    case media_source::MediaSourceCommand::REPEAT_ALL:
+      this->repeat_ = false;
+      break;
     default:
       break;
   }
@@ -759,13 +767,24 @@ void SdCacheMediaSource::write_task_(void *arg) {
   park();
 }
 
+// With repeat one, start the file again as soon as a pass ends. The source stays PLAYING throughout, so the player
+// never finishes the speaker, and the decoded audio still queued in the speaker covers the next pass's start-up.
+// After a miss, the writer has usually finished by the end of the pass, so later passes play from the card.
 void SdCacheMediaSource::play_() {
+  bool again = false;
+  while (this->play_once_(again) && this->repeat_.load() && !this->stop_requested_.load())
+    again = true;
+}
+
+bool SdCacheMediaSource::play_once_(bool again) {
   PlaySession session;
   PlaySession *ps = &session;
   ps->url = this->play_url_;
-  ESP_LOGD(TAG, "Internal RAM free %u KB (largest %u KB), DMA-capable free %u KB",
-           heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
-           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024, heap_caps_get_free_size(MALLOC_CAP_DMA) / 1024);
+  if (!again)
+    ESP_LOGD(TAG, "Internal RAM free %u KB (largest %u KB), DMA-capable free %u KB",
+             heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024,
+             heap_caps_get_free_size(MALLOC_CAP_DMA) / 1024);
   const std::string key = this->cache_key_(ps->url);
   const bool cacheable = this->play_caching_ && !this->excluded_(ps->url);
 
@@ -787,6 +806,8 @@ void SdCacheMediaSource::play_() {
     ps->src = fopen(cached_path.c_str(), "rb");
     if (ps->src == nullptr) {
       ESP_LOGW(TAG, "Cached file %s won't open; streaming instead", cached_path.c_str());
+    } else if (again) {
+      ESP_LOGV(TAG, "Repeat: %s", ps->url.c_str());
     } else {
       utime(cached_path.c_str(), nullptr);  // most recently played: evicted last
       this->hits_++;
@@ -802,9 +823,9 @@ void SdCacheMediaSource::play_() {
       if (ps->http != nullptr)
         esp_http_client_cleanup(ps->http);
       this->play_failed_ = true;
-      return;
+      return false;
     }
-    if (cacheable)
+    if (cacheable && !again)
       this->misses_++;
     ESP_LOGD(TAG, "Web: %s, Content-Type '%s', %" PRId64 " bytes", ext_for(type) ? ext_for(type) : "?",
              ps->content_type.c_str(), ps->content_length);
@@ -828,7 +849,7 @@ void SdCacheMediaSource::play_() {
     if (ps->http != nullptr)
       esp_http_client_cleanup(ps->http);
     this->play_failed_ = true;
-    return;
+    return false;
   }
 
   if (ps->src == nullptr) {
@@ -978,6 +999,7 @@ void SdCacheMediaSource::play_() {
     unlink(ps->part_path.c_str());
   }
   this->play_failed_ = failed && !this->stop_requested_.load();
+  return !failed && !this->stop_requested_.load();
 }
 
 }  // namespace esphome::sd_cache

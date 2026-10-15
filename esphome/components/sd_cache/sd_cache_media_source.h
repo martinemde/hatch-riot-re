@@ -68,6 +68,9 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   void unmount_();
   static void play_task_(void *arg);
   void play_();
+  // One pass through the file. `again`: a repeat pass, so don't count or log it as a new play. True if it reached the
+  // end (not stopped, not failed).
+  bool play_once_(bool again);
   static void fetch_task_(void *arg);  // arg: PlaySession *
   static void write_task_(void *arg);  // arg: this
 
@@ -112,6 +115,9 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   std::atomic<bool> play_hit_{false};
   std::atomic<bool> stop_requested_{false};
   std::atomic<bool> paused_{false};
+  // Repeat one: the play task starts the file again at the end instead of finishing. The speaker keeps running and
+  // the decoder runs ahead of it, so the next pass starts while the last one is still playing: no gap.
+  std::atomic<bool> repeat_{false};
   audio::AudioStreamInfo stream_info_;
   // Playback task stacks live in PSRAM: internal RAM is needed for the I2S DMA buffers, and with three internal
   // stacks the speaker failed to start. A finished task parks itself; its owner deletes it.
