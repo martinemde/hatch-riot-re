@@ -71,7 +71,7 @@ finalize() {
 mac_check() {
   local dir="$1" devmac dirmac
   devmac="$("$ESPTOOL" --port "$PORT" --baud 115200 --after no-reset flash-id 2>/dev/null \
-            | grep -m1 -oE 'MAC: *([0-9a-f]{2}:){5}[0-9a-f]{2}' | awk '{print $2}' | tr -d ':')"
+            | grep -m1 -oE 'MAC: *([0-9a-f]{2}:){5}[0-9a-f]{2}' | awk '{print $2}' | tr -d ':' || true)"
   dirmac="$(basename "$dir" | cut -d_ -f1)"
   if [[ -n "$devmac" && -n "$dirmac" && "$devmac" != "$dirmac" ]]; then
     echo "WARNING: device MAC $devmac does not match backup dir ($dirmac)."
@@ -108,7 +108,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "== chip-id / flash-id"
 "$ESPTOOL" --port "$PORT" --baud 115200 --after no-reset flash-id | tee "$TMP/flash_id.txt"
-MAC="$(grep -m1 -oE 'MAC: *([0-9a-f]{2}:){5}[0-9a-f]{2}' "$TMP/flash_id.txt" | awk '{print $2}' | tr -d ':')"
+MAC="$(grep -m1 -oE 'MAC: *([0-9a-f]{2}:){5}[0-9a-f]{2}' "$TMP/flash_id.txt" | awk '{print $2}' | tr -d ':' || true)"
 OUT="$ROOT/backups/${MAC:-unknown}_$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT"
 cp "$TMP/flash_id.txt" "$OUT/"
