@@ -5,14 +5,15 @@
 # Use the same api_encryption_key the device was last flashed with: it secures both the API and OTA, so the
 # Builder's first wireless install only works if it matches (and Home Assistant keeps its pairing).
 #
-# Both the config and the custom components come from GitHub, pinned to release v1.4. To update, change the tag in
+# Both the config and the custom components come from GitHub, pinned to release v1.5. To update, change the tag in
 # both the package URL (`@<ref>`) and `ref:` below (or use `main` to follow every push).
 #
 # To customise, add keys after `packages:`; they override the base (e.g. substitutions, or a `wifi:` block with
 # `manual_ip:` for a static address).
 
 substitutions:
-  # Keep `hatch-rest` to adopt a unit already running this firmware.
+  # Keep `hatch-rest` to adopt a unit already running this firmware. The device adds its MAC to the name
+  # (hatch-rest-a1b2c3); if a later wireless install can't find it, set `wifi: use_address:` to that name or its IP.
   name: hatch-rest
   friendly_name: Hatch Rest
 
@@ -20,10 +21,10 @@ external_components:
   - source:
       type: git
       url: https://github.com/w1ll1am23/hatch-riot-re
-      ref: v1.4
+      ref: v1.5
       path: esphome/components
     components: [hatch_expander, hatch_display, hatch_status_led, sd_cache, speaker_source]
     refresh: 1d
 
 packages:
-  hatch_rest: github://w1ll1am23/hatch-riot-re/esphome/hatch-rest-base.yaml@v1.4
+  hatch_rest: github://w1ll1am23/hatch-riot-re/esphome/hatch-rest-base.yaml@v1.5

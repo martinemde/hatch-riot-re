@@ -47,15 +47,37 @@ package) and the custom components from this GitHub repo, so the Builder only ho
    `api_encryption_key`. Use the **same `api_encryption_key`** the device was last flashed with: it secures both the
    API and OTA, so the first wireless install only works if it matches (and Home Assistant keeps its pairing).
 2. Create a device and replace its YAML with the contents of `hatch-rest-builder.yaml`. Keep `name: hatch-rest` to
-   adopt a unit already running this firmware.
+   adopt a unit already running this firmware. From v1.5 the device adds the last three MAC bytes to its name
+   (`hatch-rest-a1b2c3`, also used for the fallback access point), so several units can share a network. If a later
+   wireless install can't find the device, add a `wifi:` block with `use_address:` set to that name or its IP.
 3. **Install → Wirelessly.** Updates keep bootloader rollback.
 
 Customise by adding keys after `packages:` — they override the base (for example `substitutions:`, or a `wifi:` block
-with `manual_ip:` for a static address). The file is pinned to release **v1.4**; to update, change the tag in both the
+with `manual_ip:` for a static address). The file is pinned to release **v1.5**; to update, change the tag in both the
 package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to follow every push).
 
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):
 back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image.
+
+## Buttons
+
+| Control | Action |
+|---|---|
+| Volume up / down | Volume |
+| Brightness up / down | Night light brightness |
+| Night light | Night light on / off |
+| Touch ring held, then hold night light | Cycle the night light through the colours (white off); release either to stop on a colour |
+| Touch ring held, then hold brightness up / down | Make the white light warmer / cooler; release either to stop |
+| Touch ring held, then volume up / down | Play the next / previous file in the [SD card cache](#sd-card-cache) |
+| Bottom button, short press | Show the Wi-Fi and toddler lock status LEDs for 30 s |
+| Bottom button, held | Authorize [Bluetooth Wi-Fi setup](#wi-fi-setup-over-bluetooth-improv) |
+
+The toddler lock disables everything except the bottom button. Touch the ring before pressing the other button:
+a button pressed first does its normal action.
+
+The night light has a single white LED, so "warmth" mixes amber from the red and green LEDs into it, from none
+(plain white) to full. Cached files are cycled in file-name order, which is a hash of the URL: effectively random,
+but the same every time. Nothing plays if the cache is off or empty.
 
 ## SD card cache
 
@@ -115,7 +137,8 @@ upgrading ESPHome, and keep the changes marked `Hatch:`.
 Built into the base config. When the Hatch can't join Wi-Fi (new network, changed password), it advertises over
 Bluetooth, and the Home Assistant companion app or [improv-wifi.com](https://www.improv-wifi.com/) can send it new
 credentials. **Hold the bottom CONNECT button** to authorize, like the stock pairing flow; authorization lasts one
-minute. It's idle while Wi-Fi is connected. The fallback access point (`Hatch Rest Fallback`) still works as before.
+minute. It's idle while Wi-Fi is connected. The fallback access point (named after the device, e.g.
+`hatch-rest-a1b2c3`) still works as before.
 
 ### Bluetooth proxy (optional)
 

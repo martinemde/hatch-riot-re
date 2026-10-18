@@ -17,6 +17,8 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  # Append the last three MAC bytes (e.g. hatch-rest-a1b2c3) so several units on one network get unique names.
+  name_add_mac_suffix: true
   comment: Hatch Rest 2nd gen running ESPHome
   on_boot:
     - priority: -100
@@ -60,8 +62,8 @@ safe_mode:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # No ssid: the fallback AP takes the device name, MAC suffix included.
   ap:
-    ssid: "Hatch Rest Fallback"
     password: !secret fallback_ap_password
   on_connect:
     - script.execute: update_status_leds
@@ -286,7 +288,12 @@ binary_sensor:
       - if:
           condition: {switch.is_off: toddler_lock}
           then:
-            - media_player.volume_up: player
+            - if:
+                condition: {binary_sensor.is_on: touch}
+                then:
+                  - script.execute: {id: play_cached_audio, step: 1}
+                else:
+                  - media_player.volume_up: player
   - platform: gpio
     id: btn_brightness_up
     name: Brightness Up Button
@@ -297,9 +304,14 @@ binary_sensor:
       - if:
           condition: {switch.is_off: toddler_lock}
           then:
-            - light.dim_relative:
-                id: night_light
-                relative_brightness: 10%
+            - if:
+                condition: {binary_sensor.is_on: touch}
+                then:
+                  - script.execute: {id: adjust_white_warmth, step: 0.02}
+                else:
+                  - light.dim_relative:
+                      id: night_light
+                      relative_brightness: 10%
   - platform: gpio
     id: btn_night_light
     name: Night Light Button
@@ -310,7 +322,12 @@ binary_sensor:
       - if:
           condition: {switch.is_off: toddler_lock}
           then:
-            - light.toggle: night_light
+            - if:
+                condition: {binary_sensor.is_on: touch}
+                then:
+                  - script.execute: cycle_night_light_colour
+                else:
+                  - light.toggle: night_light
   - platform: gpio
     id: btn_volume_down
     name: Volume Down Button
@@ -321,7 +338,12 @@ binary_sensor:
       - if:
           condition: {switch.is_off: toddler_lock}
           then:
-            - media_player.volume_down: player
+            - if:
+                condition: {binary_sensor.is_on: touch}
+                then:
+                  - script.execute: {id: play_cached_audio, step: -1}
+                else:
+                  - media_player.volume_down: player
   - platform: gpio
     id: btn_brightness_down
     name: Brightness Down Button
@@ -332,11 +354,19 @@ binary_sensor:
       - if:
           condition: {switch.is_off: toddler_lock}
           then:
-            - light.dim_relative:
-                id: night_light
-                relative_brightness: -10%
+            - if:
+                condition: {binary_sensor.is_on: touch}
+                then:
+                  - script.execute: {id: adjust_white_warmth, step: -0.02}
+                else:
+                  - light.dim_relative:
+                      id: night_light
+                      relative_brightness: -10%
   # Top touch (touch controller output, active high). Debounced: a touch must last 50 ms to count (drops noise
   # spikes), and short dropouts while held are bridged so a hold isn't split into a tap plus a new touch.
+  # Held, it changes what the front buttons do (touch first, then the button):
+  #   night light (hold) = cycle colours, brightness up / down (hold) = warmer / cooler white,
+  #   volume up / down = next / previous file in the SD card cache.
   - platform: gpio
     id: touch
     name: Touch
@@ -345,12 +375,24 @@ binary_sensor:
       - delayed_on: 50ms
       - delayed_off: 100ms
   # Bottom "CONNECT" button (active low). Stock: hold >2 s = Bluetooth setup; exposed to Home Assistant here.
+  # A short press shows the status LEDs for 30 s (works with the toddler lock on: it only shows status).
   - platform: gpio
     id: btn_bottom
     name: Bottom Button
     pin:
       number: GPIO36
       inverted: true
+    on_click:
+      - min_length: 50ms
+        max_length: 1500ms
+        then:
+          - script.execute: show_status_leds
+
+globals:
+  # Where the night light colour cycle is on the colour wheel (degrees).
+  - id: night_light_hue
+    type: int
+    initial_value: '0'
 
 # ---------------------------------------------------------------- Clock display (display MCU over UART1)
 uart:
@@ -425,12 +467,18 @@ script:
           if (h == 0) h = 12;
           id(clock_display).show_time(h, t.minute);
 
+  # Status LEDs stay dark (like stock, which only shows them when tipped over) until show_status_leds runs.
   # Wi-Fi window: green = connected to Home Assistant, amber = Wi-Fi only, red = no Wi-Fi.
   # Lock window: green while the toddler lock is on.
   - id: update_status_leds
     mode: restart
     then:
       - lambda: |-
+          if (!id(show_status_leds).is_running()) {
+            id(status_leds).set(hatch_status_led::WINDOW_WIFI, hatch_status_led::COLOUR_OFF);
+            id(status_leds).set(hatch_status_led::WINDOW_LOCK, hatch_status_led::COLOUR_OFF);
+            return;
+          }
           uint8_t wifi;
           if (!wifi::global_wifi_component->is_connected()) wifi = hatch_status_led::COLOUR_RED;
           else if (api::global_api_server->is_connected()) wifi = hatch_status_led::COLOUR_GREEN;
@@ -438,6 +486,74 @@ script:
           id(status_leds).set(hatch_status_led::WINDOW_WIFI, wifi);
           id(status_leds).set(hatch_status_led::WINDOW_LOCK,
                               id(toddler_lock).state ? hatch_status_led::COLOUR_GREEN : hatch_status_led::COLOUR_OFF);
+  # Show the status LEDs for 30 s; another press restarts the timer. Changes while shown update them live.
+  - id: show_status_leds
+    mode: restart
+    then:
+      - script.execute: update_status_leds
+      - delay: 30s
+      - lambda: |-
+          id(status_leds).set(hatch_status_led::WINDOW_WIFI, hatch_status_led::COLOUR_OFF);
+          id(status_leds).set(hatch_status_led::WINDOW_LOCK, hatch_status_led::COLOUR_OFF);
+
+  # Touch ring + night light button held: sweep the night light around the colour wheel (white off), about 6 s per
+  # turn, from the current colour. It stops on the colour it's at when either is released.
+  - id: cycle_night_light_colour
+    mode: single
+    then:
+      - lambda: |-
+          auto &v = id(night_light).remote_values;
+          float s, val;
+          rgb_to_hsv(v.get_red(), v.get_green(), v.get_blue(), id(night_light_hue), s, val);
+      - while:
+          condition:
+            lambda: return id(touch).state && id(btn_night_light).state;
+          then:
+            - lambda: |-
+                id(night_light_hue) = (id(night_light_hue) + 3) % 360;
+                float r, g, b;
+                hsv_to_rgb(id(night_light_hue), 1.0f, 1.0f, r, g, b);
+                auto call = id(night_light).turn_on();
+                call.set_rgb(r, g, b);
+                call.set_color_brightness(1.0f);
+                call.set_white(0.0f);
+                call.set_transition_length(0);
+                call.perform();
+            - delay: 50ms
+  # Touch ring + brightness up / down held: make the white light warmer / cooler (full range in 2.5 s), stopping on
+  # release. The LEDs have a single white channel, so warmth is amber from the red and green LEDs mixed into it:
+  # none = plain white, full = amber at full strength.
+  - id: adjust_white_warmth
+    mode: single
+    parameters:
+      step: float
+    then:
+      - while:
+          condition:
+            lambda: |-
+              return id(touch).state && (step > 0 ? id(btn_brightness_up).state : id(btn_brightness_down).state);
+          then:
+            - lambda: |-
+                auto &v = id(night_light).remote_values;
+                float warmth = v.get_white() > 0.0f ? v.get_color_brightness() : 0.0f;
+                auto call = id(night_light).turn_on();
+                call.set_rgb(1.0f, 0.4f, 0.0f);
+                call.set_color_brightness(clamp(warmth + step, 0.0f, 1.0f));
+                call.set_white(1.0f);
+                call.set_transition_length(0);
+                call.perform();
+            - delay: 50ms
+  # Touch ring + volume up / down: play the next / previous file in the SD card cache. The order is by file name,
+  # which is a hash of the URL, so effectively random but fixed. Does nothing with the cache off or empty.
+  - id: play_cached_audio
+    mode: single
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          auto uri = id(sd_cache_source).cached_uri(step);
+          if (!uri.empty())
+            id(player).make_call().set_media_url(uri).perform();
 
 hatch_status_led:
   id: status_leds

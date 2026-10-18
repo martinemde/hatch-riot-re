@@ -29,6 +29,8 @@ static const char *const TAG = "sd_cache";
 
 static constexpr const char *BASE_PATH = "/sdcard";
 static constexpr const char *PART_SUFFIX = ".part";
+// Plays a cached file by name (sdcache://<key>.<ext>), for cycling through the cache from the device's buttons.
+static constexpr const char *LOCAL_SCHEME = "sdcache://";
 // The stock firmware waits 1 s after switching the card on (hatch_sd_init 0x4010e6a4).
 static constexpr uint32_t POWER_SETTLE_MS = 1000;
 static constexpr size_t CHUNK = 4096;
@@ -82,6 +84,18 @@ const FileTypeExt FILE_TYPES[] = {
     {audio::AudioFileType::WAV, "wav"},
 #endif
 };
+
+// The type of a cached file, from its extension; NONE if it isn't one.
+audio::AudioFileType type_for(const char *name) {
+  const char *dot = strrchr(name, '.');
+  if (dot != nullptr) {
+    for (const auto &ft : FILE_TYPES) {
+      if (strcmp(dot + 1, ft.ext) == 0)
+        return ft.type;
+    }
+  }
+  return audio::AudioFileType::NONE;
+}
 
 const char *ext_for(audio::AudioFileType type) {
   for (const auto &ft : FILE_TYPES) {
@@ -422,11 +436,39 @@ void SdCacheMediaSource::clear_cache() {
   ESP_LOGI(TAG, "Cache cleared: %" PRIu32 " files removed", removed);
 }
 
+std::string SdCacheMediaSource::cached_uri(int step) {
+  if (!this->mounted_.load())
+    return "";
+  std::vector<std::string> names;
+  DIR *dir = opendir(this->dir_path_.c_str());
+  if (dir == nullptr)
+    return "";
+  while (struct dirent *e = readdir(dir)) {
+    if (e->d_type != DT_DIR && type_for(e->d_name) != audio::AudioFileType::NONE)
+      names.emplace_back(e->d_name);
+  }
+  closedir(dir);
+  if (names.empty())
+    return "";
+  std::sort(names.begin(), names.end());
+  // Step from the file playing now (or last played); if that isn't cached, start at the first (or last) file.
+  const int n = int(names.size());
+  int cur = -1;
+  for (int i = 0; i < n && !this->last_played_.empty(); i++) {
+    if (names[i].starts_with(this->last_played_)) {
+      cur = i;
+      break;
+    }
+  }
+  const int next = cur < 0 ? (step >= 0 ? 0 : n - 1) : ((cur + step) % n + n) % n;
+  return std::string(LOCAL_SCHEME) + names[next];
+}
+
 // ---------------------------------------------------------------- MediaSource
 
 bool SdCacheMediaSource::can_handle(const std::string &uri) const {
   // Every web URL: with caching off (or no card) this source still streams, so mono gets sent as stereo.
-  return uri.starts_with("http://") || uri.starts_with("https://");
+  return uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with(LOCAL_SCHEME);
 }
 
 bool SdCacheMediaSource::play_uri(const std::string &uri) {
@@ -436,6 +478,12 @@ bool SdCacheMediaSource::play_uri(const std::string &uri) {
     ESP_LOGE(TAG, "Cannot play '%s': source is busy", uri.c_str());
     return false;
   }
+  const bool local = uri.starts_with(LOCAL_SCHEME);
+  if (local && !this->mounted_.load()) {
+    ESP_LOGE(TAG, "Cannot play '%s': card not mounted", uri.c_str());
+    return false;
+  }
+  this->last_played_ = local ? uri.substr(strlen(LOCAL_SCHEME)) : this->cache_key_(uri);
   this->play_url_ = uri;
   this->play_caching_ = this->enabled_ && this->mounted_.load();
   this->stop_requested_ = false;
@@ -785,13 +833,25 @@ bool SdCacheMediaSource::play_once_(bool again) {
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024,
              heap_caps_get_free_size(MALLOC_CAP_DMA) / 1024);
-  const std::string key = this->cache_key_(ps->url);
-  const bool cacheable = this->play_caching_ && !this->excluded_(ps->url);
+  const bool local = ps->url.starts_with(LOCAL_SCHEME);
+  const std::string key = local ? "" : this->cache_key_(ps->url);
+  const bool cacheable = !local && this->play_caching_ && !this->excluded_(ps->url);
 
-  // Cache lookup: <key>.<ext> for any supported type.
+  // Cache lookup: <key>.<ext> for any supported type, or the named file for sdcache://.
   std::string cached_path;
   audio::AudioFileType type = audio::AudioFileType::NONE;
-  if (cacheable) {
+  if (local) {
+    const std::string name = ps->url.substr(strlen(LOCAL_SCHEME));
+    type = type_for(name.c_str());
+    if (name.find('/') != std::string::npos || type == audio::AudioFileType::NONE ||
+        (ps->src = fopen((this->dir_path_ + "/" + name).c_str(), "rb")) == nullptr) {
+      ESP_LOGE(TAG, "Cannot open cached file %s", name.c_str());
+      this->play_failed_ = true;
+      return false;
+    }
+    if (!again)
+      ESP_LOGI(TAG, "Playing cached file %s", name.c_str());
+  } else if (cacheable) {
     for (const auto &ft : FILE_TYPES) {
       std::string p = this->dir_path_ + "/" + key + "." + ft.ext;
       struct stat st;

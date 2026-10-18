@@ -56,6 +56,10 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   float cache_used_mb() const { return float(this->cache_bytes_.load()) / (1 << 20); }
   uint32_t hits() const { return this->hits_; }
   uint32_t misses() const { return this->misses_; }
+  // URI of the cached file `step` places after (negative: before) the one playing or last played, wrapping around,
+  // in file-name order; "" if the card isn't mounted or the cache is empty. Play it through the media player. Main
+  // loop only.
+  std::string cached_uri(int step);
 
   // MediaSource
   bool play_uri(const std::string &uri) override;
@@ -107,6 +111,8 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   uint32_t hits_{0};
   uint32_t misses_{0};
 
+  // Cache key or file name of the last playback, the starting point for cached_uri(). Main loop only.
+  std::string last_played_;
   // Current playback, owned by the play task while play_running_ is set.
   std::string play_url_;
   bool play_caching_{false};  // caching on and card mounted when this playback started

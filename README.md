@@ -19,8 +19,8 @@ on the device** (2026-10-12):
 | OTA updates | ✅ (with bootloader rollback) |
 
 Known gaps: Home Assistant TTS / URL playback depends on HA's ffmpeg proxy (it returned empty streams in testing;
-Music Assistant is unaffected), the status LEDs aren't gated by orientation like stock, the bottom button has no
-hold action, and **RIoT+ (Rest+ 2nd gen) is not supported**. Details and the component list are in
+Music Assistant is unaffected), the status LEDs show on a short press of the bottom button (for 30 s) rather than
+when tipped over like stock, the bottom button has no hold action, and **RIoT+ (Rest+ 2nd gen) is not supported**. Details and the component list are in
 [docs/esphome-plan.md](docs/esphome-plan.md#replacement-config); flashing and setup are in
 [esphome/README.md](esphome/README.md). Back up the flash with [`scripts/backup.sh`](scripts/backup.sh) first.
 
