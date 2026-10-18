@@ -7,6 +7,19 @@ How to open the unit, with photos of a disassembled one (in `teardown/`).
 You only have to take it apart for the **first** flash: the stock firmware won't accept an ESPHome image over the
 air, so that one goes over serial to the main board. After that, updates go over Wi-Fi.
 
+### Tools required
+
+- **Phillips screwdriver** for the base, power board, top, center and diffuser screws.
+- **Pry tool / spudger**, ideally metal (a small flat-head screwdriver also works), for the touch ring and the white
+  inner ring.
+- **Soldering iron and solder** to disconnect the touch ring wire, and to reconnect it on reassembly.
+- **Tweezers or a hobby knife** to clear the glue on the center-post connectors.
+- **Double-sided tape** to re-stick the touch ring and the bottom rubber afterwards.
+- For the flash itself: a **3.3 V USB-to-serial adapter**, a fine-tip iron and thin wire to solder to the ESP32
+  module (see [serial-flashing.md](serial-flashing.md)).
+
+### Steps
+
 Follow these steps:
 
 1. **Peel the grey rubber off the bottom.** This is easy, but I haven't managed it without ruining the sticky tape,
@@ -46,8 +59,8 @@ Follow these steps:
    <img src="teardown/09-PXL_20261011_234410576.jpg" width="400" alt="Step 9: white inner ring removed, LED ring board exposed">
 10. **Remove the main board.** While gently pushing up on the black connector on the bottom, push back the retention
     clips holding the main board in.
-11. **Done:** the main board is out. Flash it over serial as in
-    [esphome-plan.md](esphome-plan.md#safe-flashing-procedure) (back up first).
+11. **Done:** the main board is out. Solder to the module, back up and flash as in
+    [serial-flashing.md](serial-flashing.md).
 
     <img src="teardown/10-main_board.jpg" width="400" alt="Step 11: RIoT Main board removed">
 
@@ -68,8 +81,9 @@ re-stick the touch ring and the bottom rubber with fresh double-sided tape where
 - **LEDs:** a separate LED ring board (marking `SKT1841LWAAW 622042B-U5`, step 9 photo) with **12 RGB LEDs
   (D1–D12) and 12 white LEDs (W1–W12)**. That matches the four LEDC channels in the firmware: R/G/B drive the
   colour LEDs in common, the 4th channel drives the separate whites.
-- **Candidate serial/programming header:** a cluster of plated through-holes next to the module on RIoT Main.
-  Worth metering for UART0 TX/RX, EN, IO0, GND and 3V3 before looking for test points.
+- **No serial/programming header:** the plated through-holes next to the module on RIoT Main don't carry all of
+  UART0 TX/RX, EN, IO0, GND and 3V3, and no other breakout does either. Wires go straight to the module's pads; see
+  [serial-flashing.md](serial-flashing.md).
 - **Not found by photo, resolved on the bus instead:** the accelerometer is a MiraMEMS **DA213** at I2C 0x27 (read
   by its ID), and this (non-Plus) unit has **no GreenPAK** (0x10 absent from the bus scan). See
   [hardware-map.md](hardware-map.md) and [open-questions.md](open-questions.md).

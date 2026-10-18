@@ -57,7 +57,8 @@ with `manual_ip:` for a static address). The file is pinned to release **v1.5**;
 package URL (`…/hatch-rest-base.yaml@<ref>`) and `ref:` (or use `main` to follow every push).
 
 A first flash of a stock unit still has to go over serial (the stock firmware won't accept an ESPHome OTA image):
-back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image.
+back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image. See
+[serial-flashing.md](../docs/serial-flashing.md) for the wiring.
 
 ## Buttons
 

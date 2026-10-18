@@ -153,8 +153,9 @@ binary_sensor:
 
 ## Safe flashing procedure
 
-1. **Find the serial pads.** You need UART0 (GPIO1 TX / GPIO3 RX), EN and GPIO0. GPIO0 is also I2C0 SDA here, so
-   the boot strap may need care.
+1. **Connect to the module.** You need UART0 (GPIO1 TX / GPIO3 RX), EN and GPIO0, soldered straight to the
+   ESP32-WROVER-E's pads (no header carries them all). Wiring and download mode:
+   [serial-flashing.md](serial-flashing.md).
 2. **Check eFuses** before writing anything:
    `espefuse.py --port … summary`. Look at `FLASH_CRYPT_CNT` (flash encryption) and `ABS_DONE_0/1` (secure boot).
    If either is set, stop and reassess. *(On the unit checked so far these were all 0/False — chip unlocked,

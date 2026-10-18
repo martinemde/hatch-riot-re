@@ -24,8 +24,8 @@ features. Its job is to confirm or disprove each item in [hardware-map.md](hardw
 
 ## Prerequisites
 
-1. Open the unit and find the ESP32 UART0 pads: TX = GPIO1, RX = GPIO3, plus GND, 3V3 (or keep the unit's own
-   supply), EN and GPIO0.
+1. Open the unit and solder to the ESP32 module's UART0 pads: TX = GPIO1, RX = GPIO3, plus GND, 3V3 (or keep the
+   unit's own supply), EN and GPIO0. See [serial-flashing.md](serial-flashing.md) for the pads and wiring.
 2. Use a 3.3 V USB-UART adapter. **Do not power the board from the adapter if it's also on its own supply.**
 3. Enter download mode: hold GPIO0 low, pulse EN.
 

@@ -68,6 +68,8 @@ These parts needed custom code (local components in [`esphome/components/`](esph
   code address it came from.
 - [docs/teardown.md](docs/teardown.md): step-by-step disassembly with photos — confirms the device (Hatch Rest 2nd
   gen, HBREST2) and the module (ESP32-WROVER-E, PCB antenna).
+- [docs/serial-flashing.md](docs/serial-flashing.md): soldering to the ESP32 module, backing up the stock flash and
+  the first ESPHome flash over serial.
 - [docs/display-protocol.md](docs/display-protocol.md): clock display UART protocol, font and brightness tables.
 - [docs/firmware-architecture.md](docs/firmware-architecture.md): firmware tasks, components and cloud stack.
 - [docs/esphome-plan.md](docs/esphome-plan.md): **the working replacement config**, component mapping, and a safe
