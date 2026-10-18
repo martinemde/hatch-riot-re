@@ -66,8 +66,8 @@ These parts needed custom code (local components in [`esphome/components/`](esph
 
 - [docs/hardware-map.md](docs/hardware-map.md): pins, buses, I2C addresses and peripheral config, each with the
   code address it came from.
-- [docs/teardown.md](docs/teardown.md): annotated disassembly photos — confirms the device (Hatch Rest 2nd gen,
-  HBREST2) and the module (ESP32-WROVER-E, PCB antenna).
+- [docs/teardown.md](docs/teardown.md): step-by-step disassembly with photos — confirms the device (Hatch Rest 2nd
+  gen, HBREST2) and the module (ESP32-WROVER-E, PCB antenna).
 - [docs/display-protocol.md](docs/display-protocol.md): clock display UART protocol, font and brightness tables.
 - [docs/firmware-architecture.md](docs/firmware-architecture.md): firmware tasks, components and cloud stack.
 - [docs/esphome-plan.md](docs/esphome-plan.md): **the working replacement config**, component mapping, and a safe
