@@ -1,2 +1,4 @@
 # Xtensa support is only in the 6.0 pre-releases
 capstone==6.0.0a11
+# Firmware fetcher (fetcher/)
+requests

@@ -68,8 +68,8 @@ re-stick the touch ring and the bottom rubber with fresh double-sided tape where
 - **LEDs:** a separate LED ring board (marking `SKT1841LWAAW 622042B-U5`, step 9 photo) with **12 RGB LEDs
   (D1–D12) and 12 white LEDs (W1–W12)**. That matches the four LEDC channels in the firmware: R/G/B drive the
   colour LEDs in common, the 4th channel drives the separate whites.
-- **Candidate serial/programming header:** a cluster of plated through-holes next to the module on RIoT Main
-  (photo 11). Worth metering for UART0 TX/RX, EN, IO0, GND and 3V3 before looking for test points.
+- **Candidate serial/programming header:** a cluster of plated through-holes next to the module on RIoT Main.
+  Worth metering for UART0 TX/RX, EN, IO0, GND and 3V3 before looking for test points.
 - **Not found by photo, resolved on the bus instead:** the accelerometer is a MiraMEMS **DA213** at I2C 0x27 (read
   by its ID), and this (non-Plus) unit has **no GreenPAK** (0x10 absent from the bus scan). See
   [hardware-map.md](hardware-map.md) and [open-questions.md](open-questions.md).

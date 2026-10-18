@@ -102,8 +102,8 @@ light plus the speaker's volume and media; use a script for anything a scene can
 
 ## Getting the image
 
-Images are downloaded with the fetcher in the sibling repo `~/Dev/hatch_firmware` (`hatch_firmware.py`). Firmware
-binaries are vendor property and are git-ignored here. Put the image in `firmware/` to use the tools.
+Images are downloaded with the fetcher in [`fetcher/`](fetcher/README.md), using your own Hatch account; it saves
+them to `firmware/`, where the tools expect them. Firmware binaries are vendor property and are git-ignored here.
 
 ## Reproducing
 
