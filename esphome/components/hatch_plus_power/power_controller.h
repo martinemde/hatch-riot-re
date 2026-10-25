@@ -16,13 +16,14 @@ struct PowerControllerResult {
   PowerControllerStatus status = PowerControllerStatus::OFFLINE_TASK_INCOMPLETE;
   SourceResult source{};
   bool sampled = false;
+  bool report_accepted = false;
   uint16_t raw = 0;
   bool variant_skipped = false;
   constexpr bool complete() const { return false; }
 };
 struct PowerTaskInputs {
   uint8_t mode = 0;
-  int board = 1;
+  int battery_report_lock_result = 1;
   uint32_t reset_guard = 0, tick = 0;
   bool disable_critical = false;
   bool amplifier = false, led_wait = false;
@@ -65,7 +66,8 @@ class PowerController {
     const PowerTaskInputs &in;
     unsigned load_calls = 0;
     int variant() { return in.variant; }
-    int board() { return in.board; }
+    int battery_report_lock() { return in.battery_report_lock_result; }
+    void battery_report_unlock() {}
     uint32_t tick() { return in.tick; }
     bool disable_critical() { return in.disable_critical; }
     bool amplifier() { return load_calls++ == 0 ? (in.mode & 1) != 0 : in.amplifier; }
@@ -73,14 +75,16 @@ class PowerController {
   };
   template<class SourceIO, class ChargeIO, class AcquisitionIO, class ShutdownIO>
   PowerControllerResult step(const PowerTaskInputs &in, SourceIO &source_io, ChargeIO &charge_io,
-                             AcquisitionIO &acquisition_io, ShutdownIO &shutdown_io) {
+                             AcquisitionIO &acquisition_io, ShutdownIO &shutdown_io,
+                             HistoryPolicy history_policy = HistoryPolicy::STOCK_NEXT_SLOT) {
     SnapshotProvider provider{in};
-    return step_dynamic(provider, source_io, charge_io, acquisition_io, shutdown_io);
+    return step_dynamic(provider, source_io, charge_io, acquisition_io, shutdown_io, history_policy);
   }
   template<class Provider, class SourceIO, class ChargeIO, class AcquisitionIO, class ShutdownIO>
   PowerControllerResult step_dynamic(Provider &in, SourceIO &source_io,
                              ChargeIO &charge_io, AcquisitionIO &acquisition_io,
-                             ShutdownIO &shutdown_io) {
+                             ShutdownIO &shutdown_io,
+                             HistoryPolicy history_policy = HistoryPolicy::STOCK_NEXT_SLOT) {
     if (in.variant() != 2) {
       PowerControllerResult result;
       result.variant_skipped = true;
@@ -90,7 +94,7 @@ class PowerController {
     auto &b = task_.battery;
     auto &off = task_.shutdown;
     PowerControllerResult result;
-    result.source = source_step(s, task_.thermal, task_.charge, source_io);
+    result.source = source_step(s, task_.thermal, task_.charge, source_io, history_policy);
     result.charge = charge_step_dynamic(task_.charge, {s.flags, 0, task_.thermal.average}, charge_io, [&]() {
       const uint8_t amplifier = in.amplifier();
       return uint8_t(amplifier | (uint8_t(in.led_wait()) << 1));
@@ -104,12 +108,13 @@ class PowerController {
     struct BatteryProvider {
       Provider &provider;
       SourceState &source;
-      int board() { return provider.board(); }
+      int battery_report_lock() { return provider.battery_report_lock(); }
+      void battery_report_unlock() { provider.battery_report_unlock(); }
       uint32_t reset_guard() { return source.inactive_count; }
       uint32_t tick() { return provider.tick(); }
     } battery_provider{in, s};
     if (result.sampled)
-      battery_sample_dynamic(b, result.raw, s.flags, battery_provider, acquisition_io);
+      result.report_accepted = battery_sample_dynamic(b, result.raw, s.flags, battery_provider, acquisition_io, history_policy);
     s.flag_907c = b.initialized;
     off.external_warning = b.external_critical_latch;
     off.comparator_index = b.comparator_index;

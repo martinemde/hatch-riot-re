@@ -46,11 +46,19 @@ class PowerRuntime : public ShutdownTransport {
     else app_.service(index, delta);
   }
   // Required application provider methods are sampled at the stock stage sites:
-  // variant, amplifier, led_wait (physical cache), tick, board,
+  // variant, amplifier, led_wait (physical cache), tick, report locking,
   // disable_critical. No task-wide early snapshot is used by the runtime path.
   PowerControllerResult step() {
-    return controller_.step_dynamic(app_, *this, *this, *this, *this);
+    last_result_ = controller_.step_dynamic(app_, *this, *this, *this, *this, HistoryPolicy::ROLLING_SUM);
+    if (last_result_.report_accepted) {
+      has_report_ = true;
+      last_report_tick_ = tick();
+    }
+    return last_result_;
   }
+  const PowerControllerResult &last_result() const { return last_result_; }
+  bool has_report() const { return has_report_; }
+  uint32_t report_age_ms() { return tick() - last_report_tick_; }
   int variant() { return app_.variant(); }
   void adc_width(unsigned bits) { adc_.adc_width(bits); }
   void characterize(unsigned unit, unsigned attenuation, unsigned bits, unsigned vref) {
@@ -103,5 +111,8 @@ class PowerRuntime : public ShutdownTransport {
   Application &app_;
   PowerController controller_{};
   SchedulerCursor scheduler_;
+  PowerControllerResult last_result_{};
+  bool has_report_{false};
+  uint32_t last_report_tick_{0};
 };
 }  // namespace esphome::hatch_plus_power

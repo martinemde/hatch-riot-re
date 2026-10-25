@@ -6,6 +6,8 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "power_status.h"
 #include "runtime_adapter.h"
+#include "native_i2c_transport.h"
+#include "esphome/components/i2c/i2c_bus.h"
 #include "adc_idf_adapter.h"
 #include "greenpak_boot_transport.h"
 #include "load_register_transport.h"
@@ -24,13 +26,16 @@ class HatchPlusPower : public PollingComponent {
   void setup() override;
   void loop() override;
   void set_allow_control(bool value) { allow_control_ = value; }
+  void set_allow_nvm_programming(bool value) { allow_nvm_programming_ = value; }
   void set_light(light::LightState *value) { light_ = value; }
   void set_speaker(speaker::Speaker *value) { speaker_ = value; }
   void set_player(media_player::MediaPlayer *value) { player_ = value; }
   void set_pwm_channels(const std::vector<uint8_t> &channels) { pwm_channels_ = channels; }
   void set_display(hatch_display::HatchDisplay *value) { display_ = value; }
   int variant() { return 2; }
-  int board() { return 1; }
+  // Battery state and publication run on the ESPHome loop, with no competing writer.
+  int battery_report_lock() { return 1; }
+  void battery_report_unlock() {}
   bool disable_critical() { return false; }
   uint32_t tick();
   void delay(unsigned ticks);
@@ -67,7 +72,11 @@ class HatchPlusPower : public PollingComponent {
   void on_shutdown() override { this->stopped_ = true; }
   float get_setup_priority() const override { return setup_priority::DATA; }
   void set_expander(hatch_expander::HatchExpander *expander) { this->expander_ = expander; }
+  void set_i2c_bus(i2c::I2CBus *bus) { power_bus_ = bus; }
   void set_battery_percent(sensor::Sensor *sensor) { battery_percent_ = sensor; }
+  void set_battery_report_age(sensor::Sensor *sensor) { battery_report_age_ = sensor; }
+  void set_battery_report_accepted(binary_sensor::BinarySensor *sensor) { battery_report_accepted_ = sensor; }
+  void set_owner_fault(binary_sensor::BinarySensor *sensor) { owner_fault_sensor_ = sensor; }
   void set_power_status(sensor::Sensor *sensor) { power_status_ = sensor; }
   void set_status_74(sensor::Sensor *sensor) { this->status_74_ = sensor; }
   void set_status_75(sensor::Sensor *sensor) { this->status_75_ = sensor; }
@@ -77,7 +86,13 @@ class HatchPlusPower : public PollingComponent {
   void set_charge_enable_logic(binary_sensor::BinarySensor *sensor) { this->charge_enable_ = sensor; }
 
  protected:
-  using Bus = HatchExpanderBus<hatch_expander::HatchExpander>;
+  // RAM 0x74 bit6 is wired external voltage, bit5 is wireless voltage;
+  // RAM 0x76 bit2 is charge-enable logic, not confirmed battery charging.
+  // Unlike stock external_charger (wired OR accepted wireless), these live
+  // hardware levels become unknown after a failed telemetry read.
+  void publish_hardware_status_();
+  using Bus = NativeI2CBus<i2c::I2CBus>;
+  i2c::I2CBus *power_bus_{nullptr};
   using Runtime = PowerRuntime<Bus, EspIdfAdc, HatchPlusPower>;
   std::unique_ptr<Bus> bus_;
   std::unique_ptr<Runtime> runtime_;
@@ -93,11 +108,15 @@ class HatchPlusPower : public PollingComponent {
   unsigned found_{2}, shutdown_reason_{0};
   uint32_t amp_timer_tick_{0}, led_second_tick_{0}, quiet_start_{0}, quiet_ticks_{0}, speaker_ready_tick_{0};
   bool speaker_ready_{false};
+  bool allow_nvm_programming_{false}, owner_fault_{false};
   bool allow_control_{false}, app_locked_{false}, amp_locked_{false}, led_locked_{false};
   bool amp_timer_active_{false}, init_failed_{false}, preparing_{false};
   bool desired_amp_{false}, desired_led_{false}, desired_initialized_{false};
   hatch_expander::HatchExpander *expander_{nullptr};
   sensor::Sensor *battery_percent_{nullptr};
+  sensor::Sensor *battery_report_age_{nullptr};
+  binary_sensor::BinarySensor *battery_report_accepted_{nullptr};
+  binary_sensor::BinarySensor *owner_fault_sensor_{nullptr};
   sensor::Sensor *power_status_{nullptr};
   sensor::Sensor *status_74_{nullptr};
   sensor::Sensor *status_75_{nullptr};

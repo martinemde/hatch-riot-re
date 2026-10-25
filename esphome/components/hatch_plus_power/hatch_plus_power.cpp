@@ -15,6 +15,11 @@ namespace esphome::hatch_plus_power {
 static const char *const TAG = "hatch_plus_power";
 
 void HatchPlusPower::setup() {
+  if (!power_bus_) {
+    ESP_LOGE(TAG, "Power peripherals require their shared bus1 owner");
+    mark_failed(); return;
+  }
+  bus_ = std::make_unique<Bus>(*power_bus_);
   if (!allow_control_) {
     ESP_LOGW(TAG, "DIAGNOSTICS ONLY: power control disabled");
     return;
@@ -23,24 +28,23 @@ void HatchPlusPower::setup() {
     ESP_LOGE(TAG, "Power control requires light, player, speaker, display and four PWM channels");
     mark_failed(); return;
   }
-  bus_ = std::make_unique<Bus>(*expander_);
   loads_ = std::make_unique<LoadRegisterTransport<hatch_expander::HatchExpander>>(*expander_, LoadExpander::AW9110B);
-  boot_ = std::make_unique<GreenPakBootTransport<Bus,HatchPlusPower>>(*bus_, *this, found_, allow_control_);
+  boot_ = std::make_unique<GreenPakBootTransport<Bus,HatchPlusPower>>(*bus_, *this, found_, allow_control_, allow_nvm_programming_);
   adc_.adc_width(12); adc_.characterize(0, 3, 12, 1100); adc_.adc_attenuation(3, 3);
-  if (!adc_.ready()) ESP_LOGW(TAG, "Boot ADC configuration reported an error; continuing stock initialization");
+  if (!adc_.ready()) { owner_fault_ = true; ESP_LOGW(TAG, "Boot ADC configuration reported an error; continuing stock initialization"); }
   const int boot_raw = adc_.raw(3);
-  if (boot_raw < 0) ESP_LOGW(TAG, "Boot ADC returned %d; retaining stock calibration input", boot_raw);
+  if (boot_raw < 0) { owner_fault_ = true; ESP_LOGW(TAG, "Boot ADC returned %d; retaining stock calibration input", boot_raw); }
   greenpak_boot(allow_control_, adc_.calibrate(static_cast<uint32_t>(boot_raw)), *boot_);
-  if (boot_->last_error()) ESP_LOGW(TAG, "GreenPAK boot reported %d; continuing stock initialization", boot_->last_error());
-  if (found_ == 2) ESP_LOGW(TAG, "GreenPAK not found; register operations remain unavailable");
+  if (boot_->last_error()) { owner_fault_ = true; ESP_LOGW(TAG, "GreenPAK boot reported %d (NVM denied=-101); continuing with existing configuration, NOT verified safe", boot_->last_error()); }
+  if (found_ == 2) { owner_fault_ = true; ESP_LOGW(TAG, "GreenPAK not found; register operations remain unavailable"); }
   runtime_ = std::make_unique<Runtime>(*bus_, greenpak_address(found_), adc_, *this, tick());
   runtime_->set_available(found_ != 2);
   runtime_->initialize();
-  if (!adc_.ready()) ESP_LOGW(TAG, "ADC configuration reported an error; continuing stock power task");
-  if (init_failed_) ESP_LOGW(TAG, "GreenPAK initialization write failed; continuing stock power task");
+  if (!adc_.ready()) { owner_fault_ = true; ESP_LOGW(TAG, "ADC configuration reported an error; continuing stock power task"); }
+  if (init_failed_) { owner_fault_ = true; ESP_LOGW(TAG, "GreenPAK initialization write failed; continuing stock power task"); }
   // The recovered cold-boot table configures both power outputs low. Keep the
   // stock software cache defaults even when the bus reports a startup failure.
-  if (loads_->initialize()) ESP_LOGW(TAG, "Power output initialization failed; continuing stock power task");
+  if (loads_->initialize()) { owner_fault_ = true; ESP_LOGW(TAG, "Power output initialization failed; continuing stock power task"); }
   load_.amp_initialized = 1;
   amplifier_request(load_, 0, *this);
   led_second_tick_ = tick();
@@ -55,11 +59,15 @@ void HatchPlusPower::delay(unsigned ticks) {
 int HatchPlusPower::lock() { if (app_locked_) return 0; app_locked_ = true; return 1; }
 void HatchPlusPower::configure_virtual(unsigned, unsigned, unsigned reg, unsigned value) {
   const uint8_t data = value;
-  if (found_ == 2 || !bus_->write(greenpak_address(found_), reg, &data, 1)) init_failed_ = true;
+  if (found_ == 2 || !bus_->write(greenpak_address(found_), reg, &data, 1)) init_failed_ = owner_fault_ = true;
 }
-void HatchPlusPower::source_changed(unsigned label) { ESP_LOGD(TAG, "Power source %u", label); }
+void HatchPlusPower::source_changed(unsigned label) {
+  ESP_LOGD(TAG, "Power source %u", label);
+  if (display_) display_->show_text_overlay(label == 4 ? "base" : label == 1 ? "plug" : "batt", 3000);
+}
 int HatchPlusPower::reset_greenpak() {
   int result = boot_->reset();
+  if (result < 0) owner_fault_ = true;
   runtime_->set_address(greenpak_address(found_));
   runtime_->set_available(found_ != 2);
   return result;
@@ -90,7 +98,7 @@ void HatchPlusPower::service(uint32_t, uint32_t) {
   // unrelated services itself; only the recovered power schedule is reproduced.
 }
 void HatchPlusPower::update(unsigned group, bool ok) {
-  if (!ok) { status_set_warning(); ESP_LOGW(TAG, "Load group %u write failed", group); }
+  if (!ok) { owner_fault_ = true; status_set_warning(); ESP_LOGW(TAG, "Load group %u write failed", group); }
 }
 void HatchPlusPower::periodic() { if (preparing_ && !shutdown_reason_) display(false); }
 bool HatchPlusPower::led_busy() {
@@ -129,26 +137,44 @@ void HatchPlusPower::loop() {
   }
   if (runtime_->poll()) {
     const auto &s = runtime_->controller().task_state();
-    if (!s.shutdown.request && !shutdown_reason_) preparing_ = false;
-    if (battery_percent_) battery_percent_->publish_state(s.battery.reported);
+    // The core can cancel even after an attempted off transaction. If power
+    // remains, follow that decision instead of retaining an owner-only latch.
+    if (!s.shutdown.request) {
+      preparing_ = false;
+      shutdown_reason_ = 0;
+    }
+    const bool accepted = runtime_->last_result().report_accepted;
+    // Acceptance is the stock reporting path, not proof of electrical validity.
+    if (battery_percent_) battery_percent_->publish_state(accepted ? s.battery.reported : NAN);
+    if (battery_report_accepted_) battery_report_accepted_->publish_state(accepted);
+    if (battery_report_age_) battery_report_age_->publish_state(runtime_->has_report() ? runtime_->report_age_ms() / 1000.0f : NAN);
+    if (owner_fault_sensor_) owner_fault_sensor_->publish_state(owner_fault_);
     if (power_status_) power_status_->publish_state(s.status.published);
-    if (external_power_) external_power_->publish_state(s.source.external_charger != 0);
-
+    // Telemetry runs after protection, never in place of it. Read failures only
+    // invalidate exposed hardware states; stock controller caches stay intact.
+    publish_hardware_status_();
   }
 }
 
 void HatchPlusPower::dump_config() {
   ESP_LOGCONFIG(TAG, "RIoT+ power control: %s", allow_control_ ? "EXPERIMENTAL enabled" : "disabled (diagnostics only)");
+  ESP_LOGCONFIG(TAG, "GreenPAK NVM erase/program approval: %s", allow_nvm_programming_ ? "enabled (persistent hardware changes)" : "disabled");
   LOG_UPDATE_INTERVAL(this);
 }
 
 void HatchPlusPower::update() {
   if (this->stopped_ || this->allow_control_)
     return;
+  publish_hardware_status_();
+}
+
+void HatchPlusPower::publish_hardware_status_() {
   uint8_t data[3];
-  // Stock reads these RAM status bytes. Never probe blank-part address 0x08,
-  // reset the GreenPAK, or change its virtual inputs or comparator reference.
-  if (!this->expander_->read_device_registers(0x10, 0x74, data, sizeof(data))) {
+  // Diagnostics use the configured part only. Control uses the address already
+  // discovered by the power owner; this read never probes, resets or writes.
+  const uint8_t address = allow_control_ ? greenpak_address(found_) : 0x10;
+  if ((allow_control_ && found_ == 2) ||
+      !bus_ || !bus_->read(address, 0x74, data, sizeof(data))) {
     this->status_set_warning();
     if (this->status_74_ != nullptr)
       this->status_74_->publish_state(NAN);
@@ -164,7 +190,8 @@ void HatchPlusPower::update() {
       this->charge_enable_->invalidate_state();
     return;
   }
-  this->status_clear_warning();
+  if (owner_fault_) this->status_set_warning();
+  else this->status_clear_warning();
   const PowerStatus status{data[0], data[1], data[2]};
   ESP_LOGD(TAG, "GreenPAK RAM 74=%02X 75=%02X 76=%02X (read-only)", data[0], data[1], data[2]);
   if (this->status_74_ != nullptr)
