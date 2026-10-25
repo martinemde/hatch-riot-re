@@ -94,6 +94,19 @@ These parts needed custom code (local components in [`esphome/components/`](esph
   flashing anything.**
 - `scripts/restore.sh`: write a backup back to the device (return to stock).
 
+### Hatch Rest+ 2 local scenes
+
+The [Rest+ 2 example](esphome/hatch-plus-example.yaml) stores ten device-local
+presets, including light, stock sound/volume, clock brightness and text. They
+work without Home Assistant. `store_preset(index, name)` and `apply_preset(index)`
+are available through the native API.
+
+Button choices live in `hatch_plus.buttons`: use `tap: next` on the top touch
+button to cycle, or `tap: none` to disable it. Set `hold: manage_preset` on your
+chosen save/delete button. Release at 5–<10 seconds to save a new slot (`SAVn`);
+hold to 10 seconds to preview `DELn`, then release to delete. See the
+[scene configuration guide](docs/rest-plus-2-esphome.md#on-device-scene-buttons).
+
 ### Hatch Rest+ 2 button blueprint
 
 [`blueprints/automation/hatch-rest-plus-2/buttons.yaml`](blueprints/automation/hatch-rest-plus-2/buttons.yaml)

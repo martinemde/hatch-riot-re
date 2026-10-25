@@ -19,7 +19,7 @@ int main() {
   Rig r;
   assert(r.controller.current_favorite() == -1);
   assert(!r.controller.save_current() && !r.controller.next() && !r.controller.previous());
-  assert(!r.controller.capture(-1) && !r.controller.play(8));
+  assert(!r.controller.capture(-1) && !r.controller.play(10));
   assert(!r.controller.configure_favorite(0,"file:///bad",false));
   assert(r.controller.configure_favorite(0,"https://example.org/rain.mp3",true));
   r.light.remote_values = {true,0.2f,0.3f,0.4f,0.5f,0.6f,0.7f}; r.player.volume=0.8f;
