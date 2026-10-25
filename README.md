@@ -94,6 +94,16 @@ These parts needed custom code (local components in [`esphome/components/`](esph
   flashing anything.**
 - `scripts/restore.sh`: write a backup back to the device (return to stock).
 
+### Hatch Rest+ 2 button blueprint
+
+[`blueprints/automation/hatch-rest-plus-2/buttons.yaml`](blueprints/automation/hatch-rest-plus-2/buttons.yaml)
+provides short, long, double and triple press actions for all seven Rest+ 2
+buttons using ESPHome firmware events. Set the event device name and any custom
+actions; no raw touch sensor or favorites configuration is required. Native
+firmware actions remain active.
+
+[![Import Rest+ 2 blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmartinemde%2Fhatch-riot-re%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fhatch-rest-plus-2%2Fbuttons.yaml)
+
 ### Touch ring blueprint
 
 [`blueprints/automation/hatch-rest/touch-ring-favorites.yaml`](blueprints/automation/hatch-rest/touch-ring-favorites.yaml)

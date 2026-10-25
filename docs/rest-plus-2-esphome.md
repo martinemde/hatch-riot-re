@@ -25,12 +25,18 @@ on the third release. Hold is 800 ms; volume/brightness holds repeat every 150 m
 Double/triple do not execute the native single-tap action. Native tap/hold actions
 remain active; Home Assistant actions are additional.
 
-Import `blueprints/automation/hatch-rest/touch-ring-favorites.yaml` from this fork.
-Select **Firmware button events / custom actions**, match the event `device`
-value to the sample's `${name}` substitution, and assign any of its 28 action
-sequences. Do not also run legacy raw-sensor mode for the same controls. Allow
-the device to perform Home Assistant actions in its ESPHome integration settings.
-No automation is created or enabled by the sample.
+Import `blueprints/automation/hatch-rest-plus-2/buttons.yaml` from this fork
+(**Hatch Rest+ 2 buttons**). Match the event device name to the sample's `${name}`
+substitution and assign any of its 28 action sequences. This blueprint uses only
+firmware events; it has no legacy sensor/favorites inputs or mode selector.
+Allow the device to perform Home Assistant actions in its ESPHome integration
+settings. No automation is created or enabled by the sample.
+
+The separate `hatch-rest/touch-ring-favorites.yaml` blueprint keeps the original
+Rest touch-sensor/favorites behavior. If migrating an existing combined-blueprint
+event automation, recreate it with the Rest+ 2 blueprint and copy its device,
+lock and custom action settings before removing the old automation. Do not run
+both automations for the same controls.
 
 ## Audio
 
