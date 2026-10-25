@@ -15,7 +15,7 @@ using namespace esphome::hatch_plus;
 int main() {
   FavoriteStore s{};
   assert(valid_store(s));
-  assert(!valid_index(-1) && valid_index(0) && valid_index(7) && !valid_index(8));
+  assert(!valid_index(-1) && valid_index(0) && valid_index(7) && valid_index(8) && valid_index(9) && !valid_index(10));
   assert(adjacent_favorite(s, 1) == -1);
   s.favorites[2].used = s.favorites[6].used = 1;
   assert(adjacent_favorite(s, 1) == 2);
@@ -94,5 +94,31 @@ def test_all_button_gestures(tmp_path):
     subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I", str(host), "-I", str(component),
                     str(host / "gestures_test.cpp"), str(component / "hatch_plus.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_named_presets_and_migration(tmp_path):
+    compiler = shutil.which("c++")
+    assert compiler, "a host C++ compiler is required"
+    host = ROOT / "tests/host/hatch_plus"
+    component = ROOT / "esphome/components/hatch_plus"
+    exe = tmp_path / "presets_test"
+    subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-DUSE_HATCH_PLUS_PRESETS",
+                    "-I", str(host), "-I", str(component),
+                    str(host / "presets_test.cpp"), str(component / "hatch_plus.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_on_device_scene_buttons(tmp_path):
+    compiler = shutil.which("c++")
+    assert compiler, "a host C++ compiler is required"
+    host = ROOT / "tests/host/hatch_plus"
+    component = ROOT / "esphome/components/hatch_plus"
+    exe = tmp_path / "scene_buttons_test"
+    subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-DUSE_HATCH_PLUS_PRESETS",
+                    "-I", str(host), "-I", str(component),
+                    str(host / "scene_buttons_test.cpp"), str(component / "hatch_plus.cpp"),
                     "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

@@ -242,7 +242,23 @@ void once_gaps_no_catchup_and_wrap() {
   for (size_t i = 1; i < d.frames.size(); i++)
     assert(uint32_t(d.frames[i].at - d.frames[i - 1].at) >= 100);
 }
+void held_overlay_until_clear() {
+  HatchDisplay d;
+  esphome::test_now = 100;
+  d.show_time(12, 34);
+  d.show_text_overlay("1234", 0); tick(d, 100);
+  digits(d, {8, 0x06, 0x5b, 0x4f, 0x66, 0});
+  d.show_time(23, 45); tick(d, 60000); assert(d.frames.size() == 1);
+  d.clear_overlay(); tick(d, 60100);
+  digits(d, {8, 0x5b, 0x4f, 0x66, 0x6d, 1});
+  d.clear_overlay(); tick(d, 60200); assert(d.frames.size() == 2);
+  d.show_text_overlay("8", 0); tick(d, 60300);
+  d.show_scrolling_text_once("7"); tick(d, 60400);
+  digits(d, {8, 0, 0, 0, 0x07, 0});
+  tick(d, 62400); digits(d, {8, 0x5b, 0x4f, 0x66, 0x6d, 1});
+}
 int main() {
+  held_overlay_until_clear();
   start_and_repeat(); repeated_input_and_brightness(); short_and_decimals();
   cancel(); no_catchup_and_wrap(); startup_gap();
   overlay_latest_content(); overlay_scroller_and_brightness(); overlay_replacement_wrap_and_gap();

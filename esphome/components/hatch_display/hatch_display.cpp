@@ -48,7 +48,7 @@ void HatchDisplay::loop() {
         this->finish_overlay_();
       else if (this->overlay_scroll_.frame_pending)
         this->overlay_dirty_ = true;
-    } else if (now - this->overlay_started_ms_ >= this->overlay_duration_ms_) {
+    } else if (this->overlay_duration_ms_ != 0 && now - this->overlay_started_ms_ >= this->overlay_duration_ms_) {
       this->finish_overlay_();
     }
   }

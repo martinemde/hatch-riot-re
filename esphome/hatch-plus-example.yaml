@@ -35,6 +35,23 @@ api:
       message: string
     then:
     - lambda: id(clock_display).show_scrolling_text_once(message);
+  - action: store_preset
+    variables:
+      index: int
+      name: string
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).store_preset(index, name);
+        error_message: Preset save failed; use slot 0-9 and check device log
+  - action: apply_preset
+    variables:
+      index: int
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).apply_preset(index);
+        error_message: Preset apply failed; use a saved slot 0-9 and check device log
   - action: favorite_capture
     variables:
       index: int
@@ -550,7 +567,15 @@ hatch_plus:
   id: hatch_controller
   light_id: night_light
   media_player_id: player
+  presets:
+    stock_sound_id: stock_sound
+    loop_switch_id: loop_sound
+    clock_switch_id: show_clock
+    clock_light_id: clock_light
+    text_id: display_text
+    display_id: clock_display
   buttons:
+  # Use tap: none (or another action) to disable top-touch preset cycling.
   - name: touch
     tap: next
     hold: stop
@@ -558,15 +583,17 @@ hatch_plus:
     tap: volume_up
   - name: volume_down
     tap: volume_down
+  # Move manage_preset to another button, or use none for API-only storage.
   - name: night_light
     tap: toggle_light
+    hold: manage_preset
   - name: brightness_up
     tap: brightness_up
   - name: brightness_down
     tap: brightness_down
   - name: bottom
     tap: previous
-    hold: save
+    hold: none
   on_button:
   - homeassistant.event:
       event: esphome.hatch_button

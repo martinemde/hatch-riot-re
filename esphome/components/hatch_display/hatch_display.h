@@ -21,9 +21,9 @@ class HatchDisplay : public Component, public uart::UARTDevice {
   void print(const std::string &text);
   /// Show text (as print()) with the colon off.
   void show_text(const std::string &text);
-  /// Temporarily show static text with colon off; duration starts at the call, underlying updates are retained.
-  /// At expiry, restore the latest content and restart any scroller at its first frame.
+  /// Show static text over the latest base content. A zero duration holds it until replaced or cleared.
   void show_text_overlay(const std::string &text, uint32_t duration_ms = 3000);
+  void clear_overlay() { if (this->overlay_active_) this->finish_overlay_(); }
   /// Temporarily scroll text once over the underlying display, then restore its latest content.
   /// Hold the first and last frames for 2000 ms each, with 500 ms steps; <=4 glyphs show for 2000 ms total.
   /// A new overlay replaces any previous overlay. Timings start when each frame is sent.

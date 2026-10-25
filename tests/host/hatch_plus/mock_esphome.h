@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 namespace esphome {
@@ -17,26 +18,35 @@ template<typename... Args> class Trigger {
 struct Preferences {
   bool save_ok{true}, sync_ok{true}, exists{false};
   int saves{0}, syncs{0};
-  std::vector<uint8_t> pending, disk;
+  std::map<uint32_t, std::vector<uint8_t>> pending, disk;
   template<typename T> auto make_preference(uint32_t);
-  bool sync() { ++syncs; if (!sync_ok) return false; disk = pending; exists = true; return true; }
+  bool sync() {
+    ++syncs;
+    if (!sync_ok) { pending.clear(); return false; }
+    for (const auto &entry : pending) disk[entry.first] = entry.second;
+    pending.clear(); exists = true; return true;
+  }
 };
 inline Preferences preferences;
 inline Preferences *global_preferences = &preferences;
 class ESPPreferenceObject {
  public:
+  explicit ESPPreferenceObject(uint32_t key = 0) : key_(key) {}
   template<typename T> bool load(T *value) {
-    if (!preferences.exists || preferences.disk.size() != sizeof(T)) return false;
-    std::memcpy(value, preferences.disk.data(), sizeof(T)); return true;
+    const auto found = preferences.disk.find(key_);
+    if (!preferences.exists || found == preferences.disk.end() || found->second.size() != sizeof(T)) return false;
+    std::memcpy(value, found->second.data(), sizeof(T)); return true;
   }
   template<typename T> bool save(const T *value) {
     ++preferences.saves;
     if (!preferences.save_ok) return false;
     const auto *bytes = reinterpret_cast<const uint8_t *>(value);
-    preferences.pending.assign(bytes, bytes + sizeof(T)); return true;
+    preferences.pending[key_].assign(bytes, bytes + sizeof(T)); return true;
   }
+ private:
+  uint32_t key_;
 };
-template<typename T> auto Preferences::make_preference(uint32_t) { return ESPPreferenceObject{}; }
+template<typename T> auto Preferences::make_preference(uint32_t key) { return ESPPreferenceObject{key}; }
 namespace light {
 enum class ColorMode { RGB_WHITE };
 struct Values {
@@ -117,6 +127,70 @@ inline void Call::perform() {
   else parent->queue.push_back(request);
 }
 }
+namespace switch_ {
+class Switch {
+ public:
+  bool state{false};
+  std::function<void(bool)> on_control;
+  void control(bool value) { state = value; if (on_control) on_control(value); }
+  void turn_on() { control(true); }
+  void turn_off() { control(false); }
+};
+}
+namespace select {
+class Select;
+class Call {
+ public:
+  explicit Call(Select *parent) : parent_(parent) {}
+  Call &set_option(const std::string &value) { value_ = value; return *this; }
+  void perform();
+ private:
+  Select *parent_; std::string value_;
+};
+class Select {
+ public:
+  std::string state{"None"};
+  std::vector<std::string> options{"None", "Rain", "Ocean"};
+  std::function<void(const std::string &)> on_control;
+  bool has_state() const { return !state.empty(); }
+  struct Option { std::string value; std::string str() const { return value; } };
+  Option current_option() const { return {state}; }
+  bool has_option(const std::string &value) const { return std::find(options.begin(),options.end(),value)!=options.end(); }
+  Call make_call() { return Call(this); }
+};
+inline void Call::perform() { if (parent_->has_option(value_)) { parent_->state=value_; if(parent_->on_control)parent_->on_control(value_); } }
+}
+namespace text {
+class Text;
+class Call {
+ public:
+  explicit Call(Text *parent) : parent_(parent) {}
+  Call &set_value(const std::string &value) { value_ = value; return *this; }
+  void perform();
+ private:
+  Text *parent_; std::string value_;
+};
+class Text {
+ public:
+  std::string state;
+  std::function<void(const std::string &)> on_control;
+  Call make_call() { return Call(this); }
+};
+inline void Call::perform() { parent_->state = value_; if(parent_->on_control)parent_->on_control(value_); }
+}
+namespace hatch_display {
+class HatchDisplay {
+ public:
+  std::vector<std::string> overlays;
+  std::string underlying;
+  bool overlay_active{false};
+  uint32_t overlay_duration{0};
+  void show_scrolling_text_once(const std::string &value) { overlays.push_back(value); overlay_active=true; overlay_duration=2000; }
+  void show_text_overlay(const std::string &value, uint32_t duration) { overlays.push_back(value); overlay_active=true; overlay_duration=duration; }
+  void clear_overlay() { overlay_active=false; }
+};
+}
+
 }
 #define ESP_LOGCONFIG(tag, ...) ((void)(tag))
 #define ESP_LOGW(tag, ...) ((void)(tag))
