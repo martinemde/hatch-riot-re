@@ -12,7 +12,6 @@ esphome:
   on_boot:
   - priority: -100
     then:
-    - lambda: id(clock_display).set_brightness(15 - (uint8_t) id(display_brightness).state);
     - script.execute: update_display
     - lambda: id(sd_cache_source).set_enabled(id(sd_cache_enabled).state);
 esp32:
@@ -31,6 +30,11 @@ api:
     key: !secret encryption_key
   reboot_timeout: 0s
   actions:
+  - action: send_text
+    variables:
+      message: string
+    then:
+    - lambda: id(clock_display).show_scrolling_text_once(message);
   - action: favorite_capture
     variables:
       index: int
@@ -128,6 +132,13 @@ hatch_expander:
   frequency: 50kHz
   interrupt_pin: GPIO34
 output:
+- platform: template
+  id: clock_brightness_output
+  type: float
+  write_action:
+  - lambda: |-
+      const auto level = static_cast<uint8_t>(roundf(state * 15.0f));
+      id(clock_display).set_brightness(15 - level);
 - platform: ledc
   id: ch_r
   channel: 0
@@ -155,8 +166,19 @@ output:
   frequency: 19500Hz
   max_power: 25%
 light:
+- platform: monochromatic
+  id: clock_light
+  name: Clock Display
+  icon: mdi:clock-digital
+  output: clock_brightness_output
+  gamma_correct: 1.0
+  default_transition_length: 0s
+  restore_mode: RESTORE_DEFAULT_ON
+  initial_state:
+    brightness: 0.733333
 - platform: rgbw
   id: night_light
+  icon: mdi:lightbulb-night
   name: Night Light
   red: ch_r
   green: ch_g
@@ -204,9 +226,65 @@ media_player:
     - http_source
     - sendspin_source
     format: NONE
+select:
+- platform: template
+  id: stock_sound
+  name: Stock Sound
+  icon: mdi:music-note
+  optimistic: true
+  restore_value: true
+  initial_option: None
+  options:
+  - None
+  - Heartbeat
+  - Stream
+  - Pink Noise
+  - Dryer
+  - Ocean
+  - Wind
+  - Rain
+  - Birds
+  - Crickets
+  - Brahms
+  - Twinkle
+  - Rockabye
+  set_action:
+  - lambda: |-
+      if (x == "None") {
+        id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
+        return;
+      }
+      std::string filename;
+      if (x == "Heartbeat") filename = "001_heartbeat.wav";
+      if (x == "Stream") filename = "002_waterstreamsmallclose16.wav";
+      if (x == "Pink Noise") filename = "003_pinknoise16.wav";
+      if (x == "Dryer") filename = "004_dryerclothes16.wav";
+      if (x == "Ocean") filename = "005_oceanwaves16.wav";
+      if (x == "Wind") filename = "006_wind16.wav";
+      if (x == "Rain") filename = "007_rain16.wav";
+      if (x == "Birds") filename = "009_birdschorus16.wav";
+      if (x == "Crickets") filename = "010_crickets16.wav";
+      if (x == "Brahms") filename = "011_brahms16.wav";
+      if (x == "Twinkle") filename = "013_twinkle16.wav";
+      if (x == "Rockabye") filename = "014_rockabye16.wav";
+      if (filename.empty()) return;
+      id(loop_sound).turn_on();
+      id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+      id(player).make_call().set_media_url("hatch-library:///Rest_Sounds/wav/" + filename).perform();
 switch:
+- platform: template
+  id: loop_sound
+  name: Loop Sound
+  icon: mdi:repeat
+  optimistic: true
+  restore_mode: RESTORE_DEFAULT_ON
+  on_turn_on:
+  - lambda: id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+  on_turn_off:
+  - lambda: id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_OFF).perform();
 - platform: gpio
   id: touch_enable
+  icon: mdi:gesture-tap
   internal: true
   restore_mode: ALWAYS_ON
   pin:
@@ -235,6 +313,7 @@ switch:
   - script.execute: update_display
 - platform: template
   id: toddler_lock
+  icon: mdi:lock
   name: Toddler Lock
   optimistic: true
   restore_mode: RESTORE_DEFAULT_OFF
@@ -245,6 +324,8 @@ switch:
 binary_sensor:
 - platform: gpio
   id: btn_volume_up
+  entity_category: diagnostic
+  icon: mdi:volume-plus
   name: Volume Up Button
   pin:
     hatch_expander: io_exp
@@ -259,6 +340,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("volume_up", false);
 - platform: gpio
   id: btn_brightness_up
+  entity_category: diagnostic
+  icon: mdi:brightness-7
   name: Brightness Up Button
   pin:
     hatch_expander: io_exp
@@ -273,6 +356,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("brightness_up", false);
 - platform: gpio
   id: btn_night_light
+  entity_category: diagnostic
+  icon: mdi:lightbulb-night
   name: Night Light Button
   pin:
     hatch_expander: io_exp
@@ -287,6 +372,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("night_light", false);
 - platform: gpio
   id: btn_volume_down
+  entity_category: diagnostic
+  icon: mdi:volume-minus
   name: Volume Down Button
   pin:
     hatch_expander: io_exp
@@ -301,6 +388,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("volume_down", false);
 - platform: gpio
   id: btn_brightness_down
+  entity_category: diagnostic
+  icon: mdi:brightness-5
   name: Brightness Down Button
   pin:
     hatch_expander: io_exp
@@ -315,6 +404,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("brightness_down", false);
 - platform: gpio
   id: touch
+  entity_category: diagnostic
+  icon: mdi:gesture-tap
   name: Touch
   pin: GPIO33
   filters:
@@ -326,6 +417,8 @@ binary_sensor:
   - lambda: id(hatch_controller).button_event("touch", false);
 - platform: gpio
   id: btn_bottom
+  entity_category: diagnostic
+  icon: mdi:gesture-tap-button
   name: Bottom Button
   pin:
     number: GPIO36
@@ -345,26 +438,13 @@ hatch_display:
   id: clock_display
   uart_id: disp_uart
   brightness: 4
-number:
-- platform: template
-  id: display_brightness
-  name: Display Brightness
-  icon: mdi:brightness-6
-  min_value: 0
-  max_value: 15
-  step: 1
-  optimistic: true
-  restore_value: true
-  initial_value: 11
-  set_action:
-  - lambda: id(clock_display).set_brightness(15 - (uint8_t) x);
 text:
 - platform: template
   id: display_text
   name: Display Text
   icon: mdi:form-textbox
   mode: text
-  max_length: 8
+  max_length: 128
   optimistic: true
   restore_value: true
   on_value:
@@ -373,23 +453,30 @@ script:
 - id: update_display
   mode: queued
   then:
-  - lambda: "if (!id(show_clock).state) {\n  id(clock_display).show_text(id(display_text).state);\n  return;\n}\n\
+  - lambda: "if (!id(show_clock).state) {\n  id(clock_display).show_scrolling_text(id(display_text).state);\n  return;\n}\n\
       auto t = id(ha_time).now();\nif (!t.is_valid()) return;\nint h = t.hour % 12;\nif (h == 0) h = 12;\nid(clock_display).show_time(h,\
       \ t.minute);"
 sensor:
 - platform: template
   name: Current Favorite
+  icon: mdi:star
   accuracy_decimals: 0
   update_interval: 1s
   lambda: return id(hatch_controller).current_favorite();
 - platform: wifi_signal
   name: Wi-Fi Signal
+  icon: mdi:wifi
+  entity_category: diagnostic
   update_interval: 60s
 - platform: uptime
   name: Uptime
+  icon: mdi:timer-outline
+  entity_category: diagnostic
 - platform: template
   name: SD Cache Used
-  icon: mdi:sd
+  icon: mdi:micro-sd
+  device_class: data_size
+  state_class: measurement
   unit_of_measurement: MB
   accuracy_decimals: 1
   entity_category: diagnostic
@@ -398,6 +485,7 @@ sensor:
 - platform: template
   name: SD Cache Files
   icon: mdi:file-music
+  state_class: measurement
   accuracy_decimals: 0
   entity_category: diagnostic
   update_interval: 60s
@@ -424,7 +512,8 @@ hatch_plus_power:
   id: plus_power_diagnostics
   hatch_expander_id: io_exp
   acknowledge_not_power_management: true
-  allow_control: true
+  # Power control remains experimental and is not hardware-safety approved.
+  allow_control: false
   light_id: night_light
   media_player_id: player
   speaker_id: spk
@@ -465,6 +554,7 @@ hatch_plus:
   - homeassistant.event:
       event: esphome.hatch_button
       data:
+        device: ${name}
         button: !lambda |-
           return button;
         gesture: !lambda |-

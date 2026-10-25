@@ -9,35 +9,65 @@ blueprint:
     and speaker are both off, a tap instead starts from the first favorite (or resumes the last one, see below).
     Favorites are scenes or scripts: a scene can set the light and the speaker's volume and media; use a script for
     anything a scene can't do (e.g. play a sound on a loop).
+
+
+    Legacy mode (the default) keeps this behavior. Event mode listens to esphome.hatch_button events
+    for the configured device, button and gesture, ignores the raw touch sensor, and runs only the
+    matching custom actions. Empty custom actions do nothing; they never fall back to favorites.
+    Native firmware local tap/hold defaults run before Home Assistant receives the event. Event custom
+    actions are additive unless native button mappings are changed separately in the firmware configuration.
+    Legacy sensor, light, speaker, favorites, tap-when-off and hold-time inputs are unused in event mode.
+    The optional lock switch gates Home Assistant actions in either mode; it does not undo native firmware actions.
   domain: automation
   homeassistant:
     min_version: 2024.10.0
   source_url: https://github.com/w1ll1am23/hatch-riot-re/blob/main/blueprints/automation/hatch-rest/touch-ring-favorites.yaml
   input:
+    control_mode:
+      name: Input mode
+      description: Legacy uses the raw touch sensor and favorites. Event mode uses classified firmware button events only.
+      default: legacy
+      selector:
+        select:
+          options:
+            - label: Legacy touch sensor / favorites
+              value: legacy
+            - label: Firmware button events / custom actions
+              value: event
+    event_device_name:
+      name: Event device name
+      description: Match the device field of esphome.hatch_button events (the ESPHome node name).
+      default: hatch-plus
+      selector:
+        text:
     touch_sensor:
       name: Touch sensor
-      description: The touch ring binary sensor (e.g. "Touch" on the Hatch Rest).
+      description: Legacy mode only. The touch ring binary sensor (e.g. "Touch" on the Hatch Rest).
+      default: []
       selector:
         entity:
           filter:
             - domain: binary_sensor
     light_entity:
       name: Light
-      description: The night light. Turned off by a hold.
+      description: Legacy mode only. The night light. Turned off by a hold.
+      default: []
       selector:
         entity:
           filter:
             - domain: light
     media_player_entity:
       name: Media player
-      description: The speaker. Stopped by a hold.
+      description: Legacy mode only. The speaker. Stopped by a hold.
+      default: []
       selector:
         entity:
           filter:
             - domain: media_player
     favorites:
       name: Favorites
-      description: Scenes or scripts to cycle through, in order.
+      description: Legacy mode only. Scenes or scripts to cycle through, in order.
+      default: []
       selector:
         entity:
           multiple: true
@@ -69,23 +99,204 @@ blueprint:
           mode: slider
     lock_switch:
       name: Lock switch (optional)
-      description: Ignore the ring while this switch is on (e.g. "Toddler Lock").
+      description: Skip Home Assistant actions in either mode while this switch is on (e.g. "Toddler Lock").
       default: []
       selector:
         entity:
           filter:
             - domain: [switch, input_boolean]
 
+    touch_tap_action:
+      name: "Touch / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    touch_hold_action:
+      name: "Touch / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    touch_double_action:
+      name: "Touch / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    touch_triple_action:
+      name: "Touch / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_up_tap_action:
+      name: "Volume up / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_up_hold_action:
+      name: "Volume up / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_up_double_action:
+      name: "Volume up / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_up_triple_action:
+      name: "Volume up / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_down_tap_action:
+      name: "Volume down / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_down_hold_action:
+      name: "Volume down / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_down_double_action:
+      name: "Volume down / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    volume_down_triple_action:
+      name: "Volume down / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_up_tap_action:
+      name: "Brightness up / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_up_hold_action:
+      name: "Brightness up / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_up_double_action:
+      name: "Brightness up / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_up_triple_action:
+      name: "Brightness up / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_down_tap_action:
+      name: "Brightness down / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_down_hold_action:
+      name: "Brightness down / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_down_double_action:
+      name: "Brightness down / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    brightness_down_triple_action:
+      name: "Brightness down / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    night_light_tap_action:
+      name: "Night light / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    night_light_hold_action:
+      name: "Night light / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    night_light_double_action:
+      name: "Night light / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    night_light_triple_action:
+      name: "Night light / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    bottom_tap_action:
+      name: "Bottom / short tap"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    bottom_hold_action:
+      name: "Bottom / long press"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    bottom_double_action:
+      name: "Bottom / double"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+    bottom_triple_action:
+      name: "Bottom / triple"
+      description: Event mode only. Additional Home Assistant actions; native firmware actions have already run.
+      default: []
+      selector:
+        action:
+
 mode: single
 max_exceeded: silent
 
+trigger_variables:
+  control_mode: !input control_mode
+
 triggers:
+  - trigger: event
+    id: button_event
+    enabled: "{{ control_mode == 'event' }}"
+    event_type: esphome.hatch_button
+    event_data:
+      device: !input event_device_name
   - trigger: state
+    id: legacy_touch
+    enabled: "{{ control_mode == 'legacy' }}"
     entity_id: !input touch_sensor
     from: "off"
     to: "on"
 
 variables:
+  control_mode: !input control_mode
   touch_sensor: !input touch_sensor
   light_entity: !input light_entity
   media_player_entity: !input media_player_entity
@@ -96,52 +307,146 @@ variables:
 
 conditions:
   - condition: template
+    value_template: >-
+      {{ (control_mode == 'event' and trigger.id == 'button_event')
+         or (control_mode == 'legacy' and trigger.id == 'legacy_touch') }}
+  - condition: template
     value_template: "{{ not lock_switch or not is_state(lock_switch, 'on') }}"
 
 actions:
-  # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step runs.
-  - wait_template: "{{ is_state(touch_sensor, 'off') }}"
-    timeout:
-      seconds: "{{ hold_time }}"
   - choose:
-      # Hold: everything off.
-      - conditions: "{{ not wait.completed }}"
+      - conditions: "{{ control_mode == 'event' }}"
         sequence:
-          - action: light.turn_off
-            target:
-              entity_id: "{{ light_entity }}"
-          - action: media_player.media_stop
-            target:
-              entity_id: "{{ media_player_entity }}"
-            continue_on_error: true
-      # Tap: next favorite.
-      - conditions: "{{ favorites | count > 0 }}"
+          - choose:
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input touch_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input touch_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input touch_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input touch_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input volume_up_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input volume_up_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input volume_up_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input volume_up_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input volume_down_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input volume_down_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input volume_down_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input volume_down_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input brightness_up_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input brightness_up_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input brightness_up_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input brightness_up_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input brightness_down_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input brightness_down_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input brightness_down_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input brightness_down_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input night_light_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input night_light_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input night_light_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input night_light_triple_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'tap' }}
+                sequence: !input bottom_tap_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'hold' }}
+                sequence: !input bottom_hold_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'double' }}
+                sequence: !input bottom_double_action
+              - conditions: >-
+                  {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'triple' }}
+                sequence: !input bottom_triple_action
+      - conditions: "{{ control_mode == 'legacy' }}"
         sequence:
-          - variables:
-              # The favorite activated most recently: a scene's state is its last activation time, a script has
-              # last_triggered. -1 if none has been used yet.
-              last_index: >-
-                {% set ns = namespace(index=-1, ts=0) %}
-                {% for e in favorites %}
-                  {% set t = as_timestamp(states(e) if e.startswith('scene.') else state_attr(e, 'last_triggered'), 0) %}
-                  {% if t > ns.ts %}{% set ns.index = loop.index0 %}{% set ns.ts = t %}{% endif %}
-                {% endfor %}
-                {{ ns.index }}
-              all_off: >-
-                {{ not is_state(light_entity, 'on')
-                   and states(media_player_entity) not in ['playing', 'buffering'] }}
-              next_index: >-
-                {% set n = favorites | count %}
-                {% if all_off and start_from == 'first' %}0
-                {% elif all_off and start_from == 'resume' %}{{ [last_index, 0] | max }}
-                {% else %}{{ (last_index + 1) % n }}{% endif %}
-              target_favorite: "{{ favorites[next_index | int] }}"
-          - if: "{{ target_favorite.startswith('scene.') }}"
-            then:
-              - action: scene.turn_on
-                target:
-                  entity_id: "{{ target_favorite }}"
-            else:
-              - action: script.turn_on
-                target:
-                  entity_id: "{{ target_favorite }}"
+          # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step runs.
+          - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+            timeout:
+              seconds: "{{ hold_time }}"
+          - choose:
+              # Hold: everything off.
+              - conditions: "{{ not wait.completed }}"
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: "{{ light_entity }}"
+                  - action: media_player.media_stop
+                    target:
+                      entity_id: "{{ media_player_entity }}"
+                    continue_on_error: true
+              # Tap: next favorite.
+              - conditions: "{{ favorites | count > 0 }}"
+                sequence:
+                  - variables:
+                      # The favorite activated most recently: a scene's state is its last activation time, a script has
+                      # last_triggered. -1 if none has been used yet.
+                      last_index: >-
+                        {% set ns = namespace(index=-1, ts=0) %}
+                        {% for e in favorites %}
+                          {% set t = as_timestamp(states(e) if e.startswith('scene.') else state_attr(e, 'last_triggered'), 0) %}
+                          {% if t > ns.ts %}{% set ns.index = loop.index0 %}{% set ns.ts = t %}{% endif %}
+                        {% endfor %}
+                        {{ ns.index }}
+                      all_off: >-
+                        {{ not is_state(light_entity, 'on')
+                           and states(media_player_entity) not in ['playing', 'buffering'] }}
+                      next_index: >-
+                        {% set n = favorites | count %}
+                        {% if all_off and start_from == 'first' %}0
+                        {% elif all_off and start_from == 'resume' %}{{ [last_index, 0] | max }}
+                        {% else %}{{ (last_index + 1) % n }}{% endif %}
+                      target_favorite: "{{ favorites[next_index | int] }}"
+                  - if: "{{ target_favorite.startswith('scene.') }}"
+                    then:
+                      - action: scene.turn_on
+                        target:
+                          entity_id: "{{ target_favorite }}"
+                    else:
+                      - action: script.turn_on
+                        target:
+                          entity_id: "{{ target_favorite }}"

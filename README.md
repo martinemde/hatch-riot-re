@@ -2,6 +2,8 @@
 
 Rest+ development: [build privately and run the local WSUP flasher](flasher/README.md).
 Application-only images; no public credentials or stock binaries are distributed.
+See the [Rest+ 2 ESPHome sample guide](docs/rest-plus-2-esphome.md) for display,
+button gestures, and automatic stock-sound looping. Power safety remains unvalidated.
 
 
 Reverse-engineering notes for the Hatch **"riot"** device firmware, and a working [ESPHome](https://esphome.io)
