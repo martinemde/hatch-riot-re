@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/defines.h"
+#include "local_library.h"
 
 #ifdef USE_ESP32
 
@@ -49,6 +50,10 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   // off once nothing is playing from it. Main loop only.
   void set_enabled(bool enabled);
   bool is_enabled() const { return this->enabled_; }
+  // Library access keeps the same SD mount alive, even when web caching is off. Main loop only.
+  void set_library_enabled(bool enabled);
+  bool is_library_enabled() const { return this->library_enabled_; }
+  LibraryPage library_page(const std::string &directory = "/", int32_t offset = 0, int32_t limit = 32);
   bool is_mounted() const { return this->mounted_.load(); }
   // Delete every cached file (only while idle). Main loop only.
   void clear_cache();
@@ -97,6 +102,7 @@ class SdCacheMediaSource final : public Component, public media_source::MediaSou
   std::vector<std::string> ignore_params_;
 
   bool enabled_{false};
+  bool library_enabled_{false};
   bool powered_{false};
   sdmmc_card_t *card_{nullptr};
   std::atomic<bool> mounted_{false};
