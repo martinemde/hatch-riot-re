@@ -1,0 +1,275 @@
+blueprint:
+  name: Hatch Rest+ 2 buttons
+  description: >-
+    Custom Home Assistant actions for all seven Hatch Rest+ 2 buttons, with short,
+    long, double and triple presses. Uses classified esphome.hatch_button firmware
+    events; no raw touch sensor or favorites configuration is needed.
+
+
+    Match the event device name to your ESPHome node's device event field.
+    Empty actions do nothing. Native firmware button actions still run; these
+    Home Assistant actions are additional. The optional lock gates only Home
+    Assistant actions and cannot undo native firmware actions.
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+  source_url: https://github.com/martinemde/hatch-riot-re/blob/main/blueprints/automation/hatch-rest-plus-2/buttons.yaml
+  input:
+    event_device_name:
+      name: Event device name
+      description: Match the device field of esphome.hatch_button events (the ESPHome node name).
+      default: hatch-plus
+      selector:
+        text:
+    lock_switch:
+      name: Lock switch (optional)
+      description: Skip Home Assistant actions while this switch is on (e.g. "Toddler Lock").
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: [switch, input_boolean]
+
+    touch_tap_action:
+      name: "Touch / short tap"
+      default: []
+      selector:
+        action:
+    touch_hold_action:
+      name: "Touch / long press"
+      default: []
+      selector:
+        action:
+    touch_double_action:
+      name: "Touch / double"
+      default: []
+      selector:
+        action:
+    touch_triple_action:
+      name: "Touch / triple"
+      default: []
+      selector:
+        action:
+    volume_up_tap_action:
+      name: "Volume up / short tap"
+      default: []
+      selector:
+        action:
+    volume_up_hold_action:
+      name: "Volume up / long press"
+      default: []
+      selector:
+        action:
+    volume_up_double_action:
+      name: "Volume up / double"
+      default: []
+      selector:
+        action:
+    volume_up_triple_action:
+      name: "Volume up / triple"
+      default: []
+      selector:
+        action:
+    volume_down_tap_action:
+      name: "Volume down / short tap"
+      default: []
+      selector:
+        action:
+    volume_down_hold_action:
+      name: "Volume down / long press"
+      default: []
+      selector:
+        action:
+    volume_down_double_action:
+      name: "Volume down / double"
+      default: []
+      selector:
+        action:
+    volume_down_triple_action:
+      name: "Volume down / triple"
+      default: []
+      selector:
+        action:
+    brightness_up_tap_action:
+      name: "Brightness up / short tap"
+      default: []
+      selector:
+        action:
+    brightness_up_hold_action:
+      name: "Brightness up / long press"
+      default: []
+      selector:
+        action:
+    brightness_up_double_action:
+      name: "Brightness up / double"
+      default: []
+      selector:
+        action:
+    brightness_up_triple_action:
+      name: "Brightness up / triple"
+      default: []
+      selector:
+        action:
+    brightness_down_tap_action:
+      name: "Brightness down / short tap"
+      default: []
+      selector:
+        action:
+    brightness_down_hold_action:
+      name: "Brightness down / long press"
+      default: []
+      selector:
+        action:
+    brightness_down_double_action:
+      name: "Brightness down / double"
+      default: []
+      selector:
+        action:
+    brightness_down_triple_action:
+      name: "Brightness down / triple"
+      default: []
+      selector:
+        action:
+    night_light_tap_action:
+      name: "Night light / short tap"
+      default: []
+      selector:
+        action:
+    night_light_hold_action:
+      name: "Night light / long press"
+      default: []
+      selector:
+        action:
+    night_light_double_action:
+      name: "Night light / double"
+      default: []
+      selector:
+        action:
+    night_light_triple_action:
+      name: "Night light / triple"
+      default: []
+      selector:
+        action:
+    bottom_tap_action:
+      name: "Bottom / short tap"
+      default: []
+      selector:
+        action:
+    bottom_hold_action:
+      name: "Bottom / long press"
+      default: []
+      selector:
+        action:
+    bottom_double_action:
+      name: "Bottom / double"
+      default: []
+      selector:
+        action:
+    bottom_triple_action:
+      name: "Bottom / triple"
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: event
+    event_type: esphome.hatch_button
+    event_data:
+      device: !input event_device_name
+
+variables:
+  lock_switch: !input lock_switch
+
+conditions:
+  - condition: template
+    value_template: "{{ not lock_switch or not is_state(lock_switch, 'on') }}"
+
+actions:
+  - choose:
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input touch_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input touch_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input touch_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'touch' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input touch_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input volume_up_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input volume_up_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input volume_up_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_up' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input volume_up_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input volume_down_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input volume_down_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input volume_down_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'volume_down' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input volume_down_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input brightness_up_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input brightness_up_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input brightness_up_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_up' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input brightness_up_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input brightness_down_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input brightness_down_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input brightness_down_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'brightness_down' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input brightness_down_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input night_light_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input night_light_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input night_light_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'night_light' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input night_light_triple_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'tap' }}
+        sequence: !input bottom_tap_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'hold' }}
+        sequence: !input bottom_hold_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'double' }}
+        sequence: !input bottom_double_action
+      - conditions: >-
+          {{ trigger.event.data.get('button') == 'bottom' and trigger.event.data.get('gesture') == 'triple' }}
+        sequence: !input bottom_triple_action
