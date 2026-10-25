@@ -508,12 +508,23 @@ external_components:
   - speaker_source
   - hatch_plus
   - hatch_plus_power
+# Shared Plus peripheral owner (stock physical port1). Not a deployment claim.
+i2c:
+  id: plus_bus1
+  sda: GPIO13
+  scl: GPIO23
+  scan: false
+  frequency: 100kHz
+
 hatch_plus_power:
+  i2c_id: plus_bus1
   id: plus_power_diagnostics
   hatch_expander_id: io_exp
-  acknowledge_not_power_management: true
-  # Power control remains experimental and is not hardware-safety approved.
+  acknowledge_experimental_power_risks: true
+  # Charging/thermal/shutdown control is experimental and not hardware-safety approved.
   allow_control: false
+  # Erases/programs GreenPAK NVM on mismatch; requires separate recovery approval.
+  allow_nvm_programming: false
   light_id: night_light
   media_player_id: player
   speaker_id: spk
@@ -521,6 +532,12 @@ hatch_plus_power:
   pwm_channels: [0, 1, 2, 3]
   battery_percent:
     name: Battery
+  battery_report_age:
+    name: Battery Report Age
+  battery_report_accepted:
+    name: Battery Report Accepted
+  owner_fault:
+    name: Power Owner Fault
   power_status:
     name: Power Status
   external_power_present:

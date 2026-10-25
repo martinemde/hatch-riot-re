@@ -3,14 +3,16 @@
 #include "greenpak_configuration.h"
 #include "register_transport.h"
 namespace esphome::hatch_plus_power {
-// Standalone only: no live instance. Bus read/write/probe use seven-bit
+// Bus read/write/probe use seven-bit
 // addresses and return bool. Clock.delay(ticks) preserves stock tick units.
 // A bool bus cannot represent queue failure separately from completion failure.
 template<class Bus,class Clock> class GreenPakBootTransport : public GreenpakProgramIO, public GreenpakDiscoveryIO, public GreenpakBootIO {
  public:
-  GreenPakBootTransport(Bus &bus,Clock &clock,unsigned &found,bool allow_control)
-      : bus_(bus),clock_(clock),found_(found),allow_control_(allow_control) {}
-  // Adapter diagnostic only; does not change original boot policy branches.
+  GreenPakBootTransport(Bus &bus,Clock &clock,unsigned &found,bool allow_control,
+                        bool allow_nvm_programming=false)
+      : bus_(bus),clock_(clock),found_(found),allow_control_(allow_control),
+        allow_nvm_programming_(allow_nvm_programming) {}
+  // First boot transport/permission fault; controller execution is not stopped.
   int last_error() const {return last_error_;}
   unsigned address7() const {return found_==0 ? 0x10 : 0x08;}
   int probe(unsigned stock_address) override {
@@ -38,6 +40,9 @@ template<class Bus,class Clock> class GreenPakBootTransport : public GreenpakPro
     return track_error(greenpak_compare_nvm(allow_control_,found_,GREENPAK_BASE,*this));
   }
   int program(bool nvm) override {
+    if (!allow_control_) return track_error(-100);
+    // A mismatch remains visible but cannot silently authorize persistent erase.
+    if (nvm && !allow_nvm_programming_) return track_error(-101);
     // NVM wire address has stock flag4, i.e. seven-bit flag2.
     nvm_=nvm;
     int result=nvm ? greenpak_program_nvm(allow_control_,found_,GREENPAK_BASE,*this)
@@ -63,6 +68,6 @@ template<class Bus,class Clock> class GreenPakBootTransport : public GreenpakPro
     return result;
   }
   int last_error_{0};
-  Bus &bus_;Clock &clock_;unsigned &found_;bool allow_control_;bool nvm_{false};
+  Bus &bus_;Clock &clock_;unsigned &found_;bool allow_control_;bool allow_nvm_programming_;bool nvm_{false};
 };
 }

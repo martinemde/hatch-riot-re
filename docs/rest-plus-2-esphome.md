@@ -49,6 +49,28 @@ not proof of charging current. The wireless icon is
 `mdi:battery-charging-wireless`; it does not assert actual charging. No heat
 class is inferred from raw status flags. Cache size uses data_size/MB/measurement.
 
-The separately developed power-controller and orientation/probe experiments are
-not part of this update. The sample keeps the published power schema and opt-out
-control behavior instead of depending on unpublished local development files.
+## Experimental power and peripheral components
+
+The sample uses the shared GPIO13/23 I²C bus for GreenPAK/receiver access;
+the load expander remains on GPIO0/22. The power schema requires
+`i2c_id` and `acknowledge_experimental_power_risks: true`. This replaces the old
+`acknowledge_not_power_management` option. The main example keeps `allow_control`
+and `allow_nvm_programming` false. The dedicated power-development configuration
+explicitly enables experimental control but keeps NVM programming disabled.
+Do not flash that configuration without reviewing its warnings.
+
+Optional battery-report age/acceptance and owner-fault diagnostics are available.
+Acceptance is not proof of electrical validity; the fault indicator is not a
+complete battery-protection check. Battery and thermal histories use corrected
+rolling sums; thresholds are unchanged. GreenPAK programming needs separate
+explicit permission and recovery planning.
+
+`hatch_accelerometer` exposes optional DA213 axes, tilt and orientation. Its
+`allow_initialization` defaults false (read-only discovery). The
+`hatch_plus_indicator_probe` component performs read-only register logging and
+creates no Home Assistant entities. Optional components are not enabled by the
+main example automatically.
+
+Host tests and compilation are not hardware-safety approval. Reboot/OTA/safe-mode,
+off/wake behavior, retained outputs after startup errors, actual charge current,
+thermal calibration and independent protection remain incompletely validated.

@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include "charge_controller.h"
+#include "history_policy.h"
 
 namespace esphome::hatch_plus_power {
 // Standalone stock source/thermal slice. No live adapter.
@@ -23,11 +24,13 @@ struct ThermalHistory {
     shared.flag_9080 = shared.flag_907f = 0;
     // Stock leaves average9070 stale until a later sample.
   }
-  void sample(int result) {
+  void sample(int result, HistoryPolicy policy = HistoryPolicy::STOCK_NEXT_SLOT) {
     const uint8_t value = static_cast<uint8_t>(result);
+    const uint8_t overwritten = ring[index];
     ring[index] = value;
     index = (index + 1) & 63;
-    total = total - ring[index] + value;  // Stock subtracts next slot, not old slot.
+    const uint8_t removed = policy == HistoryPolicy::ROLLING_SUM ? overwritten : ring[index];
+    total = total - removed + value;
     average = static_cast<uint8_t>(total >> 6);
   }
 };
@@ -45,7 +48,8 @@ struct SourceResult {
 // app_lock() returns exactly1 on acquisition; other values retain +194.
 // source_changed(label) is an abstract notification, not a live queue adapter.
 template<class IO>
-SourceResult source_step(SourceState &s, ThermalHistory &history, ChargeState &shared, IO &io) {
+SourceResult source_step(SourceState &s, ThermalHistory &history, ChargeState &shared, IO &io,
+                         HistoryPolicy history_policy = HistoryPolicy::STOCK_NEXT_SLOT) {
   if (s.wireless_state == 0) {
     const int pin = io.read_pin(0x3a5);
     if (pin > 0 && io.find_receiver() >= 1) {
@@ -60,7 +64,7 @@ SourceResult source_step(SourceState &s, ThermalHistory &history, ChargeState &s
     }
   } else if (s.wireless_state == 1) {
     const int pin = io.read_pin(0x3a5);
-    if (pin > 0) history.sample(io.temperature());
+    if (pin > 0) history.sample(io.temperature(), history_policy);
     else if (pin == 0 && io.find_receiver() < 0) {
       s.flags &= ~4;
       s.wireless_state = 0;

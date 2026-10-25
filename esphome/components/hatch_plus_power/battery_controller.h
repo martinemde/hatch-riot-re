@@ -1,8 +1,9 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include "history_policy.h"
 
-// Offline stock 7.1.645 battery core. Deliberately not wired to live hardware.
+// Stock 7.1.645 battery core, also used by the opt-in ESPHome runtime.
 // Evidence: work/riotplus645/power-cfg.txt, 401d5f3a..658b.
 namespace esphome::hatch_plus_power {
 struct BatteryState {
@@ -61,18 +62,26 @@ template<class IO> bool battery_measure(BatteryState &s, IO &io, bool force_low,
 }
 // This covers reporting and the false-reading reset decision, not later shutdown.
 // io.reset() returns success. All constants are literal stock arithmetic.
-template<class IO, class Provider> void battery_sample_dynamic(BatteryState &s, uint16_t raw, uint8_t flags,
-                                                               Provider &provider, IO &io) {
+// The stock application mutex gates reporting, not history. Exactly 1 means
+// acquired; every acquired path releases it. A private, single-owner adapter may
+// explicitly map this to a successful no-op ownership boundary.
+// True means this visit accepted a report (including an unchanged percentage).
+template<class IO, class Provider> bool battery_sample_dynamic(BatteryState &s, uint16_t raw, uint8_t flags,
+                                                               Provider &provider, IO &io,
+                                                               HistoryPolicy history_policy = HistoryPolicy::STOCK_NEXT_SLOT) {
   if (!s.initialized) {
     s.samples.fill(raw); s.total = uint32_t(raw) << 6; s.initialized = true;
   }
+  const uint16_t overwritten = s.samples[s.index];
   s.samples[s.index] = raw; s.index = (s.index + 1) & 63;
-  s.total = s.total - s.samples[s.index] + raw;
-  if (provider.board() != 1) return;
+  const uint16_t removed = history_policy == HistoryPolicy::ROLLING_SUM ? overwritten : s.samples[s.index];
+  s.total = s.total - removed + raw;
+  if (provider.battery_report_lock() != 1) return false;
   uint16_t average = (s.total >> 6) & 65535;
   if (raw == 2952 || (raw == 4232 && average <= 4099)) {
     if ((flags & 5) && !provider.reset_guard() && io.reset()) s.comparator_index = 255;
-    return;
+    provider.battery_report_unlock();
+    return false;
   }
   if (average > 4099) s.reported = 100;
   else if (average <= 3379) s.reported = 0;
@@ -94,16 +103,20 @@ template<class IO, class Provider> void battery_sample_dynamic(BatteryState &s, 
   }
   s.critical = average <= 3330;
   s.updated = 1; s.deadline = provider.tick() + 3600000U;
+  provider.battery_report_unlock();
+  return true;
 }
-template<class IO> void battery_sample(BatteryState &s, uint16_t raw, uint8_t flags,
-                                      int board, uint32_t reset_guard, uint32_t now, IO &io) {
+template<class IO> bool battery_sample(BatteryState &s, uint16_t raw, uint8_t flags,
+                                      int report_lock_result, uint32_t reset_guard, uint32_t now, IO &io,
+                                       HistoryPolicy history_policy = HistoryPolicy::STOCK_NEXT_SLOT) {
   struct Provider {
-    int board_value;
+    int report_lock_result;
     uint32_t guard_value, now_value;
-    int board() { return board_value; }
+    int battery_report_lock() { return report_lock_result; }
+    void battery_report_unlock() {}
     uint32_t reset_guard() { return guard_value; }
     uint32_t tick() { return now_value; }
-  } provider{board, reset_guard, now};
-  battery_sample_dynamic(s, raw, flags, provider, io);
+  } provider{report_lock_result, reset_guard, now};
+  return battery_sample_dynamic(s, raw, flags, provider, io, history_policy);
 }
 }  // namespace esphome::hatch_plus_power

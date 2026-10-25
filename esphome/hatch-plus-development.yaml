@@ -1,0 +1,518 @@
+# DEVELOPMENT ONLY. Power parity is incomplete. DO NOT FLASH ON A HATCH.
+# Dummy credentials: replace only after hardware validation and recovery are established.
+substitutions:
+  name: hatch-plus-development
+  friendly_name: Hatch Plus Development
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: true
+  comment: 'UNVALIDATED Plus development build: power management incomplete; DO NOT FLASH HATCH'
+  on_boot:
+  - priority: -100
+    then:
+    - lambda: id(clock_display).set_brightness(15 - (uint8_t) id(display_brightness).state);
+    - script.execute: update_display
+    - lambda: id(sd_cache_source).set_enabled(id(sd_cache_enabled).state);
+esp32:
+  board: esp32dev
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    advanced:
+      enable_ota_rollback: true
+psram:
+  mode: quad
+  speed: 80MHz
+logger: null
+api:
+  encryption:
+    key: !secret encryption_key
+  reboot_timeout: 0s
+  actions:
+  - action: send_text
+    variables:
+      message: string
+    then:
+    - lambda: id(clock_display).show_scrolling_text_once(message);
+  - action: favorite_capture
+    variables:
+      index: int
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).capture(index);
+        error_message: Favorite operation failed; check device log
+  - action: favorite_configure
+    variables:
+      index: int
+      uri: string
+      repeat: bool
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).configure_favorite(index, uri, repeat);
+        error_message: Favorite operation failed; check device log
+  - action: favorite_play
+    variables:
+      index: int
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).play(index);
+        error_message: Favorite operation failed; check device log
+  - action: favorite_erase
+    variables:
+      index: int
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).erase(index);
+        error_message: Favorite operation failed; check device log
+  - action: favorite_next
+    variables: {}
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).next();
+        error_message: Favorite operation failed; check device log
+  - action: favorite_previous
+    variables: {}
+    then:
+    - api.respond:
+        success: !lambda |-
+          return id(hatch_controller).previous();
+        error_message: Favorite operation failed; check device log
+  - action: library_page
+    variables:
+      directory: string
+      offset: int
+      limit: int
+    then:
+    - api.respond:
+        data: !lambda |-
+          if (offset < 0 || limit < 1 || limit > 64) {
+            root["error"] = "Invalid offset or limit";
+            return;
+          }
+          auto page = id(sd_cache_source).library_page(directory, offset, limit);
+          root["error"] = page.error;
+          root["next_offset"] = page.next_offset;
+          root["has_more"] = page.has_more;
+          auto entries = root["entries"].to<JsonArray>();
+          for (const auto &entry : page.entries) {
+            auto item = entries.add<JsonObject>();
+            item["name"] = entry.name;
+            item["uri"] = entry.uri;
+            item["is_directory"] = entry.is_directory;
+            item["size_bytes"] = entry.size_bytes;
+          }
+ota:
+- platform: esphome
+  encryption:
+    key: !secret encryption_key
+safe_mode: null
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  reboot_timeout: 0s
+time:
+- platform: homeassistant
+  id: ha_time
+  on_time_sync:
+  - script.execute: update_display
+  on_time:
+  - seconds: 0
+    then:
+    - script.execute: update_display
+hatch_expander:
+- id: io_exp
+  sda: GPIO0
+  scl: GPIO22
+  address: 88
+  frequency: 50kHz
+  interrupt_pin: GPIO34
+power_supply:
+- id: led_power
+  pin:
+    hatch_expander: io_exp
+    number: 8
+    mode: output
+  enable_time: 30ms
+  keep_on_time: 2s
+output:
+- platform: ledc
+  id: ch_r
+  pin:
+    number: GPIO5
+    ignore_strapping_warning: true
+  frequency: 19500Hz
+  max_power: 50%
+  power_supply: led_power
+- platform: ledc
+  id: ch_g
+  pin: GPIO18
+  frequency: 19500Hz
+  max_power: 37.5%
+  power_supply: led_power
+- platform: ledc
+  id: ch_b
+  pin: GPIO19
+  frequency: 19500Hz
+  max_power: 25%
+  power_supply: led_power
+- platform: ledc
+  id: ch_w
+  pin: GPIO4
+  frequency: 19500Hz
+  max_power: 25%
+  power_supply: led_power
+light:
+- platform: rgbw
+  id: night_light
+  name: Night Light
+  red: ch_r
+  green: ch_g
+  blue: ch_b
+  white: ch_w
+  color_interlock: false
+  restore_mode: RESTORE_DEFAULT_OFF
+  default_transition_length: 1s
+i2s_audio:
+- id: i2s_out
+  i2s_lrclk_pin: GPIO25
+  i2s_bclk_pin: GPIO26
+speaker:
+- platform: i2s_audio
+  id: spk
+  i2s_audio_id: i2s_out
+  dac_type: external
+  i2s_dout_pin: GPIO21
+  channel: mono
+  bits_per_sample: 16bit
+  sample_rate: 48000
+sendspin:
+  id: sendspin_hub
+media_source:
+- platform: sd_cache
+  id: sd_cache_source
+  power_pin:
+    hatch_expander: io_exp
+    number: 9
+    mode: output
+  library_enabled: true
+- platform: audio_http
+  id: http_source
+- platform: sendspin
+  id: sendspin_source
+media_player:
+- platform: speaker_source
+  id: player
+  name: Speaker
+  volume_initial: 0.3
+  media_pipeline:
+    speaker: spk
+    sources:
+    - sd_cache_source
+    - http_source
+    - sendspin_source
+    format: NONE
+  on_state:
+  - if:
+      condition:
+        media_player.is_idle: player
+      then:
+      - delay: 2s
+      - if:
+          condition:
+            media_player.is_idle: player
+          then:
+          - switch.turn_off: amp
+      else:
+      - script.execute: amp_on_after_clocks
+switch:
+- platform: gpio
+  id: amp
+  internal: true
+  restore_mode: ALWAYS_OFF
+  pin:
+    hatch_expander: io_exp
+    number: 10
+    mode: output
+- platform: gpio
+  id: touch_enable
+  internal: true
+  restore_mode: ALWAYS_ON
+  pin:
+    hatch_expander: io_exp
+    number: 5
+    mode: output
+- platform: template
+  id: sd_cache_enabled
+  name: SD Card Cache
+  icon: mdi:sd
+  optimistic: true
+  restore_mode: RESTORE_DEFAULT_OFF
+  on_turn_on:
+  - lambda: id(sd_cache_source).set_enabled(true);
+  on_turn_off:
+  - lambda: id(sd_cache_source).set_enabled(false);
+- platform: template
+  id: show_clock
+  name: Show Clock
+  icon: mdi:clock-digital
+  optimistic: true
+  restore_mode: RESTORE_DEFAULT_ON
+  on_turn_on:
+  - script.execute: update_display
+  on_turn_off:
+  - script.execute: update_display
+- platform: template
+  id: toddler_lock
+  name: Toddler Lock
+  optimistic: true
+  restore_mode: RESTORE_DEFAULT_OFF
+  on_turn_on:
+  - lambda: id(hatch_controller).set_child_lock(true);
+  on_turn_off:
+  - lambda: id(hatch_controller).set_child_lock(false);
+binary_sensor:
+- platform: gpio
+  id: btn_volume_up
+  name: Volume Up Button
+  pin:
+    hatch_expander: io_exp
+    number: 0
+    mode: input
+    inverted: true
+  filters:
+  - delayed_on: 30ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("volume_up", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("volume_up", false);
+- platform: gpio
+  id: btn_brightness_up
+  name: Brightness Up Button
+  pin:
+    hatch_expander: io_exp
+    number: 1
+    mode: input
+    inverted: true
+  filters:
+  - delayed_on: 30ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("brightness_up", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("brightness_up", false);
+- platform: gpio
+  id: btn_night_light
+  name: Night Light Button
+  pin:
+    hatch_expander: io_exp
+    number: 2
+    mode: input
+    inverted: true
+  filters:
+  - delayed_on: 30ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("night_light", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("night_light", false);
+- platform: gpio
+  id: btn_volume_down
+  name: Volume Down Button
+  pin:
+    hatch_expander: io_exp
+    number: 3
+    mode: input
+    inverted: true
+  filters:
+  - delayed_on: 30ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("volume_down", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("volume_down", false);
+- platform: gpio
+  id: btn_brightness_down
+  name: Brightness Down Button
+  pin:
+    hatch_expander: io_exp
+    number: 4
+    mode: input
+    inverted: true
+  filters:
+  - delayed_on: 30ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("brightness_down", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("brightness_down", false);
+- platform: gpio
+  id: touch
+  name: Touch
+  pin: GPIO33
+  filters:
+  - delayed_on: 50ms
+  - delayed_off: 100ms
+  on_press:
+  - lambda: id(hatch_controller).button_event("touch", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("touch", false);
+- platform: gpio
+  id: btn_bottom
+  name: Bottom Button
+  pin:
+    number: GPIO36
+    inverted: true
+  on_press:
+  - lambda: id(hatch_controller).button_event("bottom", true);
+  on_release:
+  - lambda: id(hatch_controller).button_event("bottom", false);
+uart:
+  id: disp_uart
+  tx_pin: GPIO27
+  baud_rate: 19200
+  data_bits: 8
+  parity: ODD
+  stop_bits: 1
+hatch_display:
+  id: clock_display
+  uart_id: disp_uart
+  brightness: 4
+number:
+- platform: template
+  id: display_brightness
+  name: Display Brightness
+  icon: mdi:brightness-6
+  min_value: 0
+  max_value: 15
+  step: 1
+  optimistic: true
+  restore_value: true
+  initial_value: 11
+  set_action:
+  - lambda: id(clock_display).set_brightness(15 - (uint8_t) x);
+text:
+- platform: template
+  id: display_text
+  name: Display Text
+  icon: mdi:form-textbox
+  mode: text
+  max_length: 128
+  optimistic: true
+  restore_value: true
+  on_value:
+  - script.execute: update_display
+script:
+- id: amp_on_after_clocks
+  mode: single
+  then:
+  - if:
+      condition:
+        switch.is_off: amp
+      then:
+      - wait_until:
+          condition:
+            speaker.is_playing: spk
+          timeout: 1s
+      - delay: 30ms
+      - switch.turn_on: amp
+- id: update_display
+  mode: queued
+  then:
+  - lambda: "if (!id(show_clock).state) {\n  id(clock_display).show_scrolling_text(id(display_text).state);\n  return;\n}\n\
+      auto t = id(ha_time).now();\nif (!t.is_valid()) return;\nint h = t.hour % 12;\nif (h == 0) h = 12;\nid(clock_display).show_time(h,\
+      \ t.minute);"
+sensor:
+- platform: template
+  name: Current Favorite
+  accuracy_decimals: 0
+  update_interval: 1s
+  lambda: return id(hatch_controller).current_favorite();
+- platform: wifi_signal
+  name: Wi-Fi Signal
+  update_interval: 60s
+- platform: uptime
+  name: Uptime
+- platform: template
+  name: SD Cache Used
+  icon: mdi:sd
+  unit_of_measurement: MB
+  accuracy_decimals: 1
+  entity_category: diagnostic
+  update_interval: 60s
+  lambda: return id(sd_cache_source).cache_used_mb();
+- platform: template
+  name: SD Cache Files
+  icon: mdi:file-music
+  accuracy_decimals: 0
+  entity_category: diagnostic
+  update_interval: 60s
+  lambda: return id(sd_cache_source).cache_files();
+button:
+- platform: template
+  name: Clear SD Cache
+  icon: mdi:delete-sweep
+  entity_category: config
+  on_press:
+  - lambda: id(sd_cache_source).clear_cache();
+external_components:
+- source:
+    type: local
+    path: components
+  components:
+  - hatch_expander
+  - hatch_display
+  - sd_cache
+  - speaker_source
+  - hatch_plus
+  - hatch_plus_power
+# Shared Plus peripheral owner (stock physical port1). Not a deployment claim.
+i2c:
+  id: plus_bus1
+  sda: GPIO13
+  scl: GPIO23
+  scan: false
+  frequency: 100kHz
+
+hatch_plus_power:
+  i2c_id: plus_bus1
+  id: plus_power_diagnostics
+  hatch_expander_id: io_exp
+  acknowledge_experimental_power_risks: true
+  external_power_present:
+    name: External Power Present
+  wireless_voltage_present:
+    name: Wireless Voltage Present
+  charge_enable_logic:
+    name: Charge Enable Logic
+hatch_plus:
+  id: hatch_controller
+  light_id: night_light
+  media_player_id: player
+  buttons:
+  - name: touch
+    tap: next
+    hold: stop
+  - name: volume_up
+    tap: volume_up
+  - name: volume_down
+    tap: volume_down
+  - name: night_light
+    tap: toggle_light
+  - name: brightness_up
+    tap: brightness_up
+  - name: brightness_down
+    tap: brightness_down
+  - name: bottom
+    tap: previous
+    hold: save
+  on_button:
+  - homeassistant.event:
+      event: esphome.hatch_button
+      data:
+        device: ${name}
+        button: !lambda |-
+          return button;
+        gesture: !lambda |-
+          return gesture;
