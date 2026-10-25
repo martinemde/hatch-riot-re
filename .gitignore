@@ -9,6 +9,7 @@ work/
 .venv-flasher/
 __pycache__/
 .venv-esphome/
+.venv-flasher/
 
 # ESPHome
 esphome/secrets.yaml

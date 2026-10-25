@@ -295,6 +295,54 @@ bool HatchExpander::read_regs_(uint8_t reg, uint8_t *data, size_t len) {
   return false;
 }
 
+bool HatchExpander::read_device_registers(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
+  if (!this->ready_ || address < 0x08 || address > 0x77 || data == nullptr || len == 0 || len > 240)
+    return false;
+  const uint8_t saved = this->address_;
+  this->address_ = address;
+  const bool ok = this->read_regs_(reg, data, len);
+  this->address_ = saved;
+  return ok;
+}
+
+bool HatchExpander::write_device_register(uint8_t address, uint8_t reg, uint8_t value) {
+  return this->write_device_registers(address, reg, &value, 1);
+}
+
+bool HatchExpander::write_device_registers(uint8_t address, uint8_t reg, const uint8_t *data, size_t len) {
+  if (!this->ready_ || address < 0x08 || address > 0x77 || address == this->address_ ||
+      data == nullptr || len == 0 || len > 240)
+    return false;
+  const uint8_t saved = this->address_;
+  this->address_ = address;
+  bool ok = false;
+  for (int attempt = 1; attempt <= WRITE_ATTEMPTS; attempt++) {
+    this->settle_();
+    ok = this->bb_write_regs_(reg, data, len);
+    this->mark_txn_(ok ? SETTLE_MS : RETRY_GAP_MS);
+    if (ok)
+      break;
+    ESP_LOGW(TAG, "Write reg 0x%02X (%u bytes) failed (attempt %d/%d)", reg, unsigned(len), attempt, WRITE_ATTEMPTS);
+  }
+  this->address_ = saved;
+  return ok;
+}
+
+bool HatchExpander::probe_device(uint8_t address) {
+  if (!this->ready_ || address < 0x08 || address > 0x77 || address == this->address_)
+    return false;
+  this->settle_();
+  bool ok = this->bb_start_();
+  if (ok)
+    ok = this->bb_write_byte_(address << 1);
+  if (ok)
+    ok = this->bb_stop_();
+  else
+    this->bb_fail_("probe NACK or bus busy");
+  this->mark_txn_(ok ? MIN_GAP_MS : RETRY_GAP_MS);
+  return ok;
+}
+
 void HatchExpander::mark_txn_(uint32_t gap_ms) {
   uint32_t until = millis() + gap_ms;
   if (int32_t(until - this->quiet_until_) > 0)

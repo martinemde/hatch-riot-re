@@ -284,14 +284,6 @@ void SdCacheMediaSource::mount_() {
     this->mount_failed_ = true;
     return;
   }
-  struct stat st;
-  if (stat(this->dir_path_.c_str(), &st) != 0 && mkdir(this->dir_path_.c_str(), 0775) != 0) {
-    ESP_LOGE(TAG, "Cannot create %s", this->dir_path_.c_str());
-    esp_vfs_fat_sdcard_unmount(BASE_PATH, this->card_);
-    this->card_ = nullptr;
-    this->mount_failed_ = true;
-    return;
-  }
   this->free_bytes_ = this->card_free_();
   this->scan_cache_();
   this->mounted_ = true;
@@ -375,16 +367,10 @@ void SdCacheMediaSource::scan_cache_() {
   while (struct dirent *e = readdir(dir)) {
     if (e->d_type == DT_DIR)
       continue;
-    std::string path = this->dir_path_ + "/" + e->d_name;
-    if (ends_with(e->d_name, PART_SUFFIX)) {
-      // A download that never completed (power loss, crash).
-      struct stat st;
-      if (stat(path.c_str(), &st) == 0)
-        this->free_bytes_ += st.st_size;
-      unlink(path.c_str());
-      ESP_LOGW(TAG, "Removed incomplete download %s", e->d_name);
+    // Scanning is read-only, including interrupted downloads. Clear cache can remove those explicitly.
+    if (ends_with(e->d_name, PART_SUFFIX))
       continue;
-    }
+    std::string path = this->dir_path_ + "/" + e->d_name;
     struct stat st;
     if (stat(path.c_str(), &st) == 0) {
       bytes += st.st_size;
