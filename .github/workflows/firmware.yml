@@ -1,0 +1,34 @@
+name: Firmware build check
+on:
+  workflow_dispatch:
+  push:
+    paths: ['esphome/**', '.github/workflows/firmware.yml']
+  pull_request:
+    paths: ['esphome/**', '.github/workflows/firmware.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install pinned ESPHome
+        run: pip install esphome==2026.9.1
+      - name: Generate disposable build-check secrets
+        shell: python
+        run: |
+          import base64, pathlib, secrets
+          key = base64.b64encode(secrets.token_bytes(32)).decode()
+          pathlib.Path('esphome/secrets.yaml').write_text(
+              'wifi_ssid: "CI-BUILD-CHECK-NOT-FOR-FLASHING"\n'
+              'wifi_password: "' + secrets.token_urlsafe(24) + '"\n'
+              'encryption_key: "' + key + '"\n')
+      - name: Compile example (validation only)
+        run: esphome compile esphome/hatch-plus-example.yaml
+      # Deliberately do not publish this binary: it contains CI-only credentials.
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f esphome/secrets.yaml

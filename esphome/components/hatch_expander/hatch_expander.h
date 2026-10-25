@@ -24,6 +24,22 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   void set_interrupt_pin(InternalGPIOPin *pin) { this->interrupt_pin_ = pin; }
   void set_p0_push_pull(bool on) { this->p0_push_pull_ = on; }
 
+  // Shared-bus transactions for other Hatch peripherals. Main-loop context only;
+  // callers must not install another driver on these SDA/SCL pins.
+  bool read_device_registers(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
+  bool write_device_register(uint8_t address, uint8_t reg, uint8_t value);
+  // ACK-only discovery. Multi-byte payloads stay in one transaction; max240
+  // supports the recovered GreenPAK RAM image without permitting NVM policy here.
+  bool probe_device(uint8_t address);
+  bool write_device_registers(uint8_t address, uint8_t reg, const uint8_t *data, size_t len);
+
+  // Error-visible output-latch access for the recovered load controller. Physical
+  // pins only; restricted to STOCK_MASK, preserving all unrelated latch bits.
+  int initialize_load_outputs_status();
+  int read_output_pin_status(uint8_t pin, bool &value);
+  int write_output_pin_status(uint8_t pin, bool value);
+  bool read_output_pin(uint8_t pin, bool &value) { return this->read_output_pin_status(pin, value) == 0; }
+  bool write_output_pin(uint8_t pin, bool value) { return this->write_output_pin_status(pin, value) == 0; }
   void pin_mode(uint8_t pin, gpio::Flags flags);
 
  protected:
@@ -56,6 +72,7 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   bool bb_write_byte_(uint8_t byte);  // true on ACK
   bool bb_read_byte_(uint8_t *byte, bool ack);
   bool bb_write_reg_(uint8_t reg, uint8_t value);
+  bool bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len);
   bool bb_read_regs_(uint8_t reg, uint8_t *data, size_t len);
   void bb_fail_(const char *what);
 

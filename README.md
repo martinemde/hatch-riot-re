@@ -1,5 +1,9 @@
 # hatch-riot-re
 
+Rest+ development: [build privately and run the local WSUP flasher](flasher/README.md).
+Application-only images; no public credentials or stock binaries are distributed.
+
+
 Reverse-engineering notes for the Hatch **"riot"** device firmware, and a working [ESPHome](https://esphome.io)
 replacement firmware for it.
 

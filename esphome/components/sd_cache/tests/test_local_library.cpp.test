@@ -1,0 +1,77 @@
+// Host test: c++ -std=c++20 -Wall -Wextra -Werror -x c++ tests/test_local_library.cpp.test -o /tmp/hatch-library-test
+#include "../local_library.h"
+#include <cassert>
+#include <filesystem>
+#include <fstream>
+#include <set>
+#include <unistd.h>
+
+using namespace esphome::sd_cache;
+int main() {
+  assert(library::allowed_file("/Rest_Sounds/wav/003_pinknoise16.wav"));
+  assert(library::allowed_file("/Sleep_Sounds/Some Sound.MP3"));
+  for (const auto *path : {"/Rest_Sounds/wav/../bin/foo.wav", "/Rest_Sounds/wav/%2e%2e/foo.wav",
+       "/Rest_Sounds/wav//foo.wav", "/Rest_Sounds/wav/a.wav?x", "/Rest_Sounds/wav/a.wav#x",
+       "/Rest_Sounds/wav/a.wav/", "/Rest_Sounds/wav/a.bin", "/Rest_Sounds/wav/a.wav.",
+       "/Rest_Sounds/wav/a.wav ", "/Rest_Sounds/wav/.. /a.wav", "/esphome_cache/a.wav",
+       "/Downloaded/sound machine backup/Rest_Sounds/wav/a.wav", "/Rest_Sounds/bin/a.wav",
+       "/Sleep_Sounds_evil/a.wav", "/Sleep_Sounds/a\\b.wav", "/a.wav"})
+    assert(!library::allowed_file(path));
+  assert(!library::allowed_file(std::string("/Sleep_Sounds/a") + char(0) + ".wav"));
+  assert(library::uri_path("hatch-library:///Sleep_Sounds/a.wav") == "/Sleep_Sounds/a.wav");
+  assert(library::uri_path("hatch-library://host/Sleep_Sounds/a.wav").empty());
+  char temp[] = "/tmp/hatch-library-test-XXXXXX";
+  const std::string base(mkdtemp(temp));
+  std::filesystem::create_directories(base + "/Downloaded/sound machine backup");
+  std::filesystem::create_directories(base + "/Rest_Sounds/wav");
+  std::filesystem::create_directories(base + "/esphome_cache");
+  for (int i = 0; i < 5; i++)
+    std::ofstream(base + "/Rest_Sounds/wav/" + std::to_string(i) + ".wav") << std::string(100, 'a');
+  std::ofstream(base + "/Rest_Sounds/wav/zero.wav") << std::string(44, 'a');
+  std::ofstream(base + "/Downloaded/sound machine backup/copy.wav") << std::string(100, 'a');
+  std::ofstream(base + "/Downloaded/original.wav") << std::string(100, 'a');
+  auto root = library::page(base, "/", 0, 64);
+  assert(root.error.empty() && root.entries.size() == 2);
+  auto downloads = library::page(base, "/Downloaded", 0, 64);
+  assert(downloads.entries.size() == 1 && downloads.entries[0].name == "original.wav");
+  assert(!library::page(base, "/Downloaded/sound machine backup", 0, 64).error.empty());
+  assert(!library::page(base, "/", 0, 65).error.empty());
+  assert(!library::page(base, "/", -1, 32).error.empty());
+  assert(!library::page(base, "/", 2147483647, 32).error.empty());
+  assert(!library::page(base, "/", 8193, 32).error.empty());
+  assert(!library::page(base, "/", 0, -1).error.empty());
+  std::set<std::string> names;
+  uint32_t cursor = 0;
+  for (;;) {
+    auto page = library::page(base, "/Rest_Sounds/wav", cursor, 2);
+    assert(page.error.empty() && page.entries.size() <= 2);
+    for (const auto &entry : page.entries) {
+      assert(names.insert(entry.name).second);
+      assert(entry.size_bytes == 100);
+      assert(!library::uri_path(entry.uri).empty());
+    }
+    if (!page.has_more)
+      break;
+    assert(page.next_offset > cursor);
+    cursor = page.next_offset;
+  }
+  assert(names.size() == 5);
+  // Empty pages must still advance the physical-entry cursor across non-audio files.
+  for (int i = 0; i < 300; i++)
+    std::ofstream(base + "/Rest_Sounds/wav/non_audio_" + std::to_string(i) + ".txt") << "x";
+  cursor = 0;
+  uint32_t pages = 0;
+  do {
+    auto page = library::page(base, "/Rest_Sounds/wav", cursor, 64);
+    assert(page.next_offset - cursor <= 128);
+    cursor = page.next_offset;
+    pages++;
+    if (!page.has_more)
+      break;
+    assert(pages < 10);
+  } while (true);
+  assert(pages >= 3);
+  assert(std::filesystem::file_size(base + "/Rest_Sounds/wav/zero.wav") == 44);
+  assert(std::filesystem::file_size(base + "/Downloaded/sound machine backup/copy.wav") == 100);
+  std::filesystem::remove_all(base);
+}

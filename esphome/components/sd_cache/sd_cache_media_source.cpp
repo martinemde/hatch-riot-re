@@ -194,6 +194,22 @@ void SdCacheMediaSource::set_enabled(bool enabled) {
   this->enable_loop();  // loop() mounts or unmounts the card to match
 }
 
+void SdCacheMediaSource::set_library_enabled(bool enabled) {
+  this->library_enabled_ = enabled;
+  if (enabled)
+    this->mount_failed_ = false;
+  this->enable_loop();
+}
+
+LibraryPage SdCacheMediaSource::library_page(const std::string &directory, int32_t offset, int32_t limit) {
+  if (!this->mounted_.load()) {
+    LibraryPage result;
+    result.error = "Card not mounted";
+    return result;
+  }
+  return library::page(BASE_PATH, directory, offset, limit);
+}
+
 void SdCacheMediaSource::loop() {
   // A playback task finished: report it. ERROR first if it failed, then IDLE on the next pass.
   if (this->reported_playing_ && !this->play_running_.load()) {
@@ -211,8 +227,9 @@ void SdCacheMediaSource::loop() {
     this->set_state_(media_source::MediaSourceState::IDLE);
   }
 
-  // Bring the card in line with the toggle.
-  if (this->enabled_ && !this->mounted_.load() && !this->mounting_.load() && !this->mount_failed_ &&
+  // Cache and library share exactly one card mount.
+  const bool need_card = this->enabled_ || this->library_enabled_;
+  if (need_card && !this->mounted_.load() && !this->mounting_.load() && !this->mount_failed_ &&
       !this->powered_) {
     this->powered_ = true;
     this->power_pin_->digital_write(true);
@@ -226,17 +243,17 @@ void SdCacheMediaSource::loop() {
       }
     });
   }
-  if (!this->enabled_ && this->mounted_.load() && !this->play_running_.load())
+  if (!need_card && this->mounted_.load() && !this->play_running_.load())
     this->unmount_();
   if (this->powered_ && !this->mounted_.load() && !this->mounting_.load() &&
-      (!this->enabled_ || this->mount_failed_)) {
+      (!need_card || this->mount_failed_)) {
     this->powered_ = false;
     this->power_pin_->digital_write(false);
   }
 
   // Nothing left to do until the toggle changes or a playback starts.
-  bool settled = (this->enabled_ && this->mounted_.load() && this->powered_) ||
-                 (!this->enabled_ && !this->mounted_.load() && !this->powered_) ||
+  bool settled = (need_card && this->mounted_.load() && this->powered_) ||
+                 (!need_card && !this->mounted_.load() && !this->powered_) ||
                  (this->mount_failed_.load() && !this->powered_);
   if (settled && !this->play_running_.load() && !this->mounting_.load() && !this->error_pending_)
     this->disable_loop();
@@ -263,14 +280,6 @@ void SdCacheMediaSource::mount_() {
   esp_err_t err = esp_vfs_fat_sdmmc_mount(BASE_PATH, &host, &slot, &cfg, &this->card_);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Mount failed: %s; caching stays off until it is toggled again", esp_err_to_name(err));
-    this->card_ = nullptr;
-    this->mount_failed_ = true;
-    return;
-  }
-  struct stat st;
-  if (stat(this->dir_path_.c_str(), &st) != 0 && mkdir(this->dir_path_.c_str(), 0775) != 0) {
-    ESP_LOGE(TAG, "Cannot create %s", this->dir_path_.c_str());
-    esp_vfs_fat_sdcard_unmount(BASE_PATH, this->card_);
     this->card_ = nullptr;
     this->mount_failed_ = true;
     return;
@@ -358,16 +367,10 @@ void SdCacheMediaSource::scan_cache_() {
   while (struct dirent *e = readdir(dir)) {
     if (e->d_type == DT_DIR)
       continue;
-    std::string path = this->dir_path_ + "/" + e->d_name;
-    if (ends_with(e->d_name, PART_SUFFIX)) {
-      // A download that never completed (power loss, crash).
-      struct stat st;
-      if (stat(path.c_str(), &st) == 0)
-        this->free_bytes_ += st.st_size;
-      unlink(path.c_str());
-      ESP_LOGW(TAG, "Removed incomplete download %s", e->d_name);
+    // Scanning is read-only, including interrupted downloads. Clear cache can remove those explicitly.
+    if (ends_with(e->d_name, PART_SUFFIX))
       continue;
-    }
+    std::string path = this->dir_path_ + "/" + e->d_name;
     struct stat st;
     if (stat(path.c_str(), &st) == 0) {
       bytes += st.st_size;
@@ -468,7 +471,8 @@ std::string SdCacheMediaSource::cached_uri(int step) {
 
 bool SdCacheMediaSource::can_handle(const std::string &uri) const {
   // Every web URL: with caching off (or no card) this source still streams, so mono gets sent as stereo.
-  return uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with(LOCAL_SCHEME);
+  return uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with(LOCAL_SCHEME) ||
+         !library::uri_path(uri).empty();
 }
 
 bool SdCacheMediaSource::play_uri(const std::string &uri) {
@@ -478,12 +482,14 @@ bool SdCacheMediaSource::play_uri(const std::string &uri) {
     ESP_LOGE(TAG, "Cannot play '%s': source is busy", uri.c_str());
     return false;
   }
-  const bool local = uri.starts_with(LOCAL_SCHEME);
+  const bool local = uri.starts_with(LOCAL_SCHEME) || !library::uri_path(uri).empty();
   if (local && !this->mounted_.load()) {
     ESP_LOGE(TAG, "Cannot play '%s': card not mounted", uri.c_str());
     return false;
   }
-  this->last_played_ = local ? uri.substr(strlen(LOCAL_SCHEME)) : this->cache_key_(uri);
+  this->last_played_ = !library::uri_path(uri).empty()
+                           ? ""
+                           : (local ? uri.substr(strlen(LOCAL_SCHEME)) : this->cache_key_(uri));
   this->play_url_ = uri;
   this->play_caching_ = this->enabled_ && this->mounted_.load();
   this->stop_requested_ = false;
@@ -833,14 +839,31 @@ bool SdCacheMediaSource::play_once_(bool again) {
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024,
              heap_caps_get_free_size(MALLOC_CAP_DMA) / 1024);
-  const bool local = ps->url.starts_with(LOCAL_SCHEME);
+  const std::string library_path = library::uri_path(ps->url);
+  const bool local = ps->url.starts_with(LOCAL_SCHEME) || !library_path.empty();
   const std::string key = local ? "" : this->cache_key_(ps->url);
   const bool cacheable = !local && this->play_caching_ && !this->excluded_(ps->url);
 
   // Cache lookup: <key>.<ext> for any supported type, or the named file for sdcache://.
   std::string cached_path;
   audio::AudioFileType type = audio::AudioFileType::NONE;
-  if (local) {
+  if (!library_path.empty()) {
+    std::string lower = library_path;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+      return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
+    });
+    type = type_for(lower.c_str());
+    struct stat st;
+    const std::string path = std::string(BASE_PATH) + library_path;
+    if (type == audio::AudioFileType::NONE || stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode) ||
+        st.st_size <= 44 || (ps->src = fopen(path.c_str(), "rb")) == nullptr) {
+      ESP_LOGE(TAG, "Cannot open library file %s", library_path.c_str());
+      this->play_failed_ = true;
+      return false;
+    }
+    if (!again)
+      ESP_LOGI(TAG, "Playing stock library file %s", library_path.c_str());
+  } else if (local) {
     const std::string name = ps->url.substr(strlen(LOCAL_SCHEME));
     type = type_for(name.c_str());
     if (name.find('/') != std::string::npos || type == audio::AudioFileType::NONE ||
@@ -914,7 +937,13 @@ bool SdCacheMediaSource::play_once_(bool again) {
 
   if (ps->src == nullptr) {
     const char *ext = ext_for(type);
-    if (cacheable && ext != nullptr) {
+    struct stat cache_dir_stat;
+    const bool cache_dir_ready = cacheable &&
+        ((stat(this->dir_path_.c_str(), &cache_dir_stat) == 0 && S_ISDIR(cache_dir_stat.st_mode)) ||
+         mkdir(this->dir_path_.c_str(), 0775) == 0);
+    if (cacheable && !cache_dir_ready)
+      ESP_LOGW(TAG, "Cannot create cache directory; playing without caching");
+    if (cache_dir_ready && ext != nullptr) {
       ps->final_path = this->dir_path_ + "/" + key + "." + ext;
       ps->part_path = this->dir_path_ + "/" + key + PART_SUFFIX;
       if (!this->make_room_(0, "")) {

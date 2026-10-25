@@ -1,0 +1,13 @@
+#include "../power_status.h"
+#include <cassert>
+using esphome::hatch_plus_power::PowerStatus;
+int main() {
+  for (unsigned a = 0; a < 256; a++) {
+    for (unsigned b = 0; b < 256; b++) {
+      const PowerStatus s{static_cast<uint8_t>(a), 0, static_cast<uint8_t>(b)};
+      assert(s.wireless_voltage_present() == bool(a & (1 << 5)));
+      assert(s.external_power_present() == bool(a & (1 << 6)));
+      assert(s.charge_enable_logic() == bool(b & (1 << 2)));
+    }
+  }
+}

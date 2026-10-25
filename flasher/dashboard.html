@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Hatch · Local WSUP</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e9efef;background:#101817;font-synthesis:none;--muted:#a0b3ad;--line:#2c403a;--accent:#c4edbc}
+*{box-sizing:border-box}body{margin:0}main{max-width:1060px;margin:auto;padding:44px 24px 32px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:30px}.eyebrow{font-size:11px;letter-spacing:.17em;font-weight:700;text-transform:uppercase;color:var(--accent)}h1{font-size:36px;letter-spacing:-.045em;margin:8px 0 10px;font-weight:600}h2{font-size:18px;letter-spacing:-.02em;margin:0}p{line-height:1.6;margin:8px 0;color:var(--muted);font-size:14px}.badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;font-size:12px;white-space:nowrap}.dot{width:7px;height:7px;border-radius:50%;background:#85918d}.badge[data-online="true"] .dot{background:var(--accent)}.notice{border:1px solid #44563d;background:#202c21;padding:15px 18px;border-radius:12px;margin-bottom:22px;font-size:13px;line-height:1.65;color:#d5e3cb}.notice strong{color:#f0f7e8}.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}.card{border:1px solid var(--line);border-radius:16px;padding:24px;background:#16211e}.card-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}.step{font:12px ui-monospace,monospace;color:var(--accent);margin-bottom:9px}.devices{display:flex;flex-direction:column;gap:10px;margin:18px 0}.device{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:14px;cursor:pointer}.device:has(input:checked){border-color:var(--accent);background:#233329}.device input{margin:4px 0 0;accent-color:var(--accent)}.device-body{min-width:0;flex:1}.device-name{display:block;font-weight:600;font-size:14px;overflow-wrap:anywhere}.device-meta{display:block;font:12px ui-monospace,monospace;color:var(--muted);margin-top:7px;overflow-wrap:anywhere}.service{display:block;font-size:12px;margin-top:8px;color:var(--muted)}.service.verified{color:var(--accent)}button{font:600 13px inherit;font-family:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:#24332d;color:#edf5ef;border-radius:9px;padding:11px 15px;transition:background .15s}button:hover:not(:disabled){background:#33493b}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button:disabled{opacity:.4;cursor:not-allowed}.primary{background:var(--accent);border-color:var(--accent);color:#182817}.primary:hover:not(:disabled){background:#d7f6d1}.action{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 0}.action+.action{border-top:1px solid var(--line)}.action strong{font-size:14px}.image-info{font:11px/1.6 ui-monospace,monospace;color:var(--muted);overflow-wrap:anywhere;margin-top:6px}.small{font-size:12px}.empty{padding:24px 14px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:13px;line-height:1.6}.wide{margin-top:20px}.progress-header{display:flex;justify-content:space-between;align-items:center;gap:15px}.operation{font-size:14px;margin-top:13px;color:#dae6df;overflow-wrap:anywhere}progress{display:block;width:100%;height:9px;margin:16px 0 10px;border:0;border-radius:8px;overflow:hidden;background:#293b33;accent-color:var(--accent)}progress::-webkit-progress-bar{background:#293b33}progress::-webkit-progress-value{background:var(--accent)}progress::-moz-progress-bar{background:var(--accent)}.error{background:#352320;color:#ffd1c5;border:1px solid #785044;padding:12px 15px;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:18px}.events{list-style:none;margin:16px 0 0;padding:0;max-height:260px;overflow:auto}.events li{display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--line);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.events time{color:var(--muted);font-family:ui-monospace,monospace;flex:0 0 100px}.events span{min-width:0}footer{font-size:11px;line-height:1.6;color:var(--muted);margin-top:22px}#selection{min-height:20px;overflow-wrap:anywhere}[hidden]{display:none!important}@media(max-width:760px){main{padding:28px 16px}.grid{grid-template-columns:1fr}h1{font-size:30px}.card{padding:20px}header{gap:10px}.badge{padding:7px 9px}.action{align-items:flex-start;flex-direction:column}.action button{width:100%}.events time{flex-basis:78px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><div class="eyebrow">Hatch / local tools</div><h1>WSUP firmware transfer</h1><p>Choose a device. Choose an image. Nothing runs automatically.</p></div><div class="badge" id="connection"><span class="dot"></span><span id="connection-text">Connecting</span></div></header>
+<div class="notice"><strong>Before you begin</strong> · Hold the device’s setup button for about 2 seconds to enter setup mode, then scan. Only devices with a verified WSUP service can receive an image here.</div>
+<div class="grid">
+<section class="card" aria-labelledby="devices-title"><div class="step">01 / FIND YOUR DEVICE</div><div class="card-head"><h2 id="devices-title">Nearby devices</h2><button id="scan" disabled>Scan · 15 seconds</button></div><p>Select the exact device you want to change.</p><div id="devices" class="devices" role="radiogroup" aria-label="Target device"><div class="empty">Connect to the local server to load devices.</div></div><p class="small" id="selection">No device selected.</p></section>
+<section class="card" aria-labelledby="firmware-title"><div class="step">02 / CHOOSE FIRMWARE</div><h2 id="firmware-title">Send an image</h2><p>Each action requires your confirmation.</p><div class="action"><div><strong>Install ESPHome</strong><div class="image-info" id="esphome-info">Checking image…</div></div><button class="primary" id="flash" disabled>Install ESPHome</button></div><div class="action"><div><strong>Restore stock</strong><div class="image-info" id="stock-info">Checking image…</div></div><button id="restore" disabled>Restore stock</button></div><p class="small">Stock restore here works only while the device is running firmware with WSUP. After installing ESPHome, use ESPHome OTA—not this restore action.</p></section>
+</div>
+<div id="error" class="error" role="alert" hidden></div>
+<section class="card wide" aria-labelledby="transfer-title"><div class="progress-header"><h2 id="transfer-title">Transfer activity</h2><span class="badge" id="activity">Idle</span></div><div class="operation" id="operation" role="status">No operation running.</div><progress id="progress" value="0" max="1" aria-label="HTTP server bytes offered"></progress><p class="small" id="bytes">0 bytes offered by the HTTP server</p><p class="small">This measures HTTP server bytes offered—not flash percentage. A completed transfer does not prove a successful flash or boot.</p></section>
+<section class="card wide" aria-labelledby="events-title"><h2 id="events-title">Event log</h2><ul id="events" class="events"><li>No events yet.</li></ul></section>
+<footer>Local WSUP utility · Scanning and firmware transfers start only when you request them.</footer>
+</main>
+<script>
+'use strict';
+const byId = id => document.getElementById(id);
+let status = null;
+let selected = '';
+let pending = false;
+let online = false;
+let requestError = '';
+const numberFormat = new Intl.NumberFormat();
+const bytesText = n => numberFormat.format(n) + ' bytes';
+function safeCount(value) { return Number.isFinite(value) && value >= 0 ? value : 0; }
+function updateControls() {
+  const device = status?.devices?.find(d => d.address === selected);
+  const busy = pending || !online || Boolean(status?.busy);
+  byId('scan').disabled = busy;
+  byId('flash').disabled = busy || !device?.wsup_service;
+  byId('restore').disabled = busy || !device?.wsup_service || !status?.images?.stock;
+  byId('selection').textContent = device ? 'Selected: ' + (device.name || 'Unnamed device') + ' · ' + device.address : 'No device selected.';
+  const error = requestError || status?.error;
+  byId('error').hidden = !error;
+  byId('error').textContent = error || '';
+}
+function render() {
+  const devices = Array.isArray(status.devices) ? status.devices : [];
+  if (!devices.some(d => d.address === selected)) selected = '';
+  const list = byId('devices');
+  // Preserve keyboard focus across status refreshes.
+  const focusedAddress = list.contains(document.activeElement) ? document.activeElement.value : null;
+  list.replaceChildren();
+  if (!devices.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No devices found yet. Enter setup mode, then start a scan.';
+    list.append(empty);
+  }
+  for (const device of devices) {
+    const label = document.createElement('label'); label.className = 'device';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'device'; radio.value = device.address;
+    radio.checked = selected === device.address;
+    radio.disabled = Boolean(status.busy) || pending;
+    radio.addEventListener('change', () => { selected = device.address; updateControls(); });
+    const body = document.createElement('span'); body.className = 'device-body';
+    const name = document.createElement('span'); name.className = 'device-name'; name.textContent = device.name || 'Unnamed device';
+    const meta = document.createElement('span'); meta.className = 'device-meta';
+    meta.textContent = device.address + (device.rssi != null ? ' · ' + device.rssi + ' dBm' : '');
+    const service = document.createElement('span');
+    service.className = 'service' + (device.wsup_service ? ' verified' : '');
+    service.textContent = device.wsup_service ? 'WSUP service: yes' : 'WSUP service: no';
+    body.append(name, meta, service); label.append(radio, body); list.append(label);
+    if (focusedAddress === device.address) radio.focus({preventScroll:true});
+  }
+  for (const image of ['esphome', 'stock']) {
+    const info = status.images?.[image];
+    byId(image + '-info').textContent = info ? bytesText(safeCount(info.bytes)) + ' · SHA-256: ' + (info.sha256 || 'unavailable') : 'Image information unavailable';
+  }
+  const sent = safeCount(status.transfer?.sent);
+  const total = safeCount(status.transfer?.total);
+  byId('progress').max = total || 1;
+  byId('progress').value = Math.min(sent, total || 0);
+  byId('bytes').textContent = bytesText(sent) + (total ? ' / ' + bytesText(total) : '') + ' offered by the HTTP server';
+  byId('activity').textContent = status.busy ? 'Working' : 'Idle';
+  byId('operation').textContent = status.operation || (status.busy ? 'Operation in progress…' : 'No operation running.');
+  const events = byId('events'); events.replaceChildren();
+  for (const event of (Array.isArray(status.events) ? status.events : [])) {
+    const row = document.createElement('li');
+    const time = document.createElement('time'); time.textContent = event.time == null ? '' : String(event.time);
+    const message = document.createElement('span'); message.textContent = event.message || '';
+    row.append(time, message); events.append(row);
+  }
+  if (!events.childElementCount) { const row = document.createElement('li'); row.textContent = 'No events yet.'; events.append(row); }
+  updateControls();
+}
+async function refresh() {
+  try {
+    const response = await fetch('/api/status', {cache:'no-store'});
+    if (!response.ok) throw new Error('Status request failed (HTTP ' + response.status + ').');
+    status = await response.json(); online = true;
+    byId('connection-text').textContent = 'Connected';
+    byId('connection').dataset.online = 'true';
+    render();
+  } catch (error) {
+    online = false;
+    byId('connection-text').textContent = 'Disconnected';
+    byId('connection').dataset.online = 'false';
+    updateControls();
+  }
+}
+async function post(path, payload) {
+  if (pending || !online || status?.busy) return;
+  pending = true; requestError = ''; updateControls();
+  try {
+    const response = await fetch(path, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error('Request failed (HTTP ' + response.status + ')' + (detail ? ': ' + detail : '.'));
+    }
+    await refresh();
+  } catch (error) { requestError = error.message || 'Request failed.'; }
+  finally { pending = false; updateControls(); }
+}
+byId('scan').addEventListener('click', () => post('/api/scan', {}));
+function confirmFlash(image) {
+  const device = status?.devices?.find(d => d.address === selected);
+  if (!device?.wsup_service || status.busy || pending || !online) return;
+  const action = image === 'stock' ? 'Restore stock firmware' : 'Install ESPHome';
+  const warning = image === 'stock'
+    ? 'This restore works only while the current firmware supports WSUP. If ESPHome is installed, use ESPHome OTA instead.'
+    : 'This replaces the current firmware. After ESPHome is installed, use ESPHome OTA; this WSUP tool cannot restore it.';
+  if (window.confirm(action + ' on ' + (device.name || 'Unnamed device') + ' (' + device.address + ')?\n\n' + warning + '\n\nHTTP transfer completion does not prove a successful flash or boot. Continue?')) {
+    post('/api/flash', {address:device.address, image, confirm:true});
+  }
+}
+byId('flash').addEventListener('click', () => confirmFlash('esphome'));
+byId('restore').addEventListener('click', () => confirmFlash('stock'));
+async function poll() { await refresh(); setTimeout(poll, 1500); }
+poll();
+</script>
+</body>
+</html>
