@@ -40,14 +40,23 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Optional("media_player_id"): cv.use_id(media_player.MediaPlayer),
     cv.Optional("display_id"): cv.use_id(HatchDisplay),
     cv.Optional("speaker_id"): cv.use_id(speaker.Speaker),
-    cv.Optional("battery_percent"): sensor.sensor_schema(unit_of_measurement="%", accuracy_decimals=0),
-    cv.Optional("power_status"): sensor.sensor_schema(accuracy_decimals=0),
-    cv.Optional("status_74"): sensor.sensor_schema(accuracy_decimals=0, entity_category="diagnostic"),
-    cv.Optional("status_75"): sensor.sensor_schema(accuracy_decimals=0, entity_category="diagnostic"),
-    cv.Optional("status_76"): sensor.sensor_schema(accuracy_decimals=0, entity_category="diagnostic"),
-    cv.Optional("external_power_present"): binary_sensor.binary_sensor_schema(entity_category="diagnostic"),
-    cv.Optional("wireless_voltage_present"): binary_sensor.binary_sensor_schema(entity_category="diagnostic"),
-    cv.Optional("charge_enable_logic"): binary_sensor.binary_sensor_schema(entity_category="diagnostic"),
+    cv.Optional("battery_percent"): sensor.sensor_schema(
+        unit_of_measurement="%", accuracy_decimals=0, device_class="battery",
+        state_class="measurement", icon="mdi:battery", entity_category="diagnostic"),
+    cv.Optional("power_status"): sensor.sensor_schema(
+        accuracy_decimals=0, icon="mdi:list-status", entity_category="diagnostic"),
+    cv.Optional("status_74"): sensor.sensor_schema(
+        accuracy_decimals=0, icon="mdi:chip", entity_category="diagnostic"),
+    cv.Optional("status_75"): sensor.sensor_schema(
+        accuracy_decimals=0, icon="mdi:chip", entity_category="diagnostic"),
+    cv.Optional("status_76"): sensor.sensor_schema(
+        accuracy_decimals=0, icon="mdi:chip", entity_category="diagnostic"),
+    cv.Optional("external_power_present"): binary_sensor.binary_sensor_schema(
+        device_class="power", icon="mdi:power-plug", entity_category="diagnostic"),
+    cv.Optional("wireless_voltage_present"): binary_sensor.binary_sensor_schema(
+        device_class="power", icon="mdi:battery-charging-wireless", entity_category="diagnostic"),
+    cv.Optional("charge_enable_logic"): binary_sensor.binary_sensor_schema(
+        icon="mdi:toggle-switch-outline", entity_category="diagnostic"),
 }).extend(cv.polling_component_schema("30s")), validate_control)
 
 

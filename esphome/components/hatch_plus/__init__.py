@@ -1,4 +1,4 @@
-"""Persistent local light/audio favorites and release-classified button gestures."""
+"""Persistent favorites, per-button tap/hold/double/triple gestures, and adjustment repeats."""
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import automation
@@ -22,6 +22,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Required("light_id"): cv.use_id(light.LightState),
     cv.Required("media_player_id"): cv.use_id(media_player.MediaPlayer),
     cv.Optional("hold_time", default="800ms"): cv.All(cv.positive_time_period_milliseconds, cv.Range(min=cv.TimePeriod(milliseconds=1), max=cv.TimePeriod(milliseconds=60000))),
+    cv.Optional("multi_click_time", default="350ms"): cv.All(cv.positive_time_period_milliseconds, cv.Range(min=cv.TimePeriod(milliseconds=1), max=cv.TimePeriod(milliseconds=2000))),
     cv.Optional("allow_buttons_when_locked", default=False): cv.boolean,
     cv.Optional("buttons", default=[]): cv.ensure_list(cv.Schema({
         cv.Required("name"): cv.string_strict,
@@ -39,6 +40,7 @@ async def to_code(config):
     cg.add(var.set_light(await cg.get_variable(config["light_id"])))
     cg.add(var.set_media_player(await cg.get_variable(config["media_player_id"])))
     cg.add(var.set_hold_ms(config["hold_time"].total_milliseconds))
+    cg.add(var.set_multi_click_ms(config["multi_click_time"].total_milliseconds))
     cg.add(var.set_allow_when_locked(config["allow_buttons_when_locked"]))
     for button in config["buttons"]:
         cg.add(var.add_button(button["name"], button["tap"], button["hold"]))

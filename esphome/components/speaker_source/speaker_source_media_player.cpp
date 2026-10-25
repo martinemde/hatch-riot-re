@@ -622,29 +622,20 @@ void SpeakerSourceMediaPlayer::handle_player_command_(media_player::MediaPlayerC
     }
 
     case media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE:
-      if (!has_internal_playlist) {
-        ps.repeat_mode = REPEAT_ONE;
-        this->send_repeat_to_sources_(pipeline);
-      } else if (target_source != nullptr) {
-        target_source->handle_command(media_source::MediaSourceCommand::REPEAT_ONE);
-      }
-      break;
-
     case media_player::MEDIA_PLAYER_COMMAND_REPEAT_OFF:
-      if (!has_internal_playlist) {
-        ps.repeat_mode = REPEAT_OFF;
-        this->send_repeat_to_sources_(pipeline);
-      } else if (target_source != nullptr) {
-        target_source->handle_command(media_source::MediaSourceCommand::REPEAT_OFF);
-      }
-      break;
-
     case media_player::MEDIA_PLAYER_COMMAND_REPEAT_ALL:
-      if (!has_internal_playlist) {
-        ps.repeat_mode = REPEAT_ALL;
-        this->send_repeat_to_sources_(pipeline);
-      } else if (target_source != nullptr) {
-        target_source->handle_command(media_source::MediaSourceCommand::REPEAT_ALL);
+      // Keep pipeline repeat even while a smart source owns playback: the next URI may use a simple source.
+      ps.repeat_mode = player_command == media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE ? REPEAT_ONE
+                       : player_command == media_player::MEDIA_PLAYER_COMMAND_REPEAT_ALL ? REPEAT_ALL
+                                                                                         : REPEAT_OFF;
+      this->send_repeat_to_sources_(pipeline);
+      if (has_internal_playlist && target_source != nullptr) {
+        auto command = player_command == media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE
+                           ? media_source::MediaSourceCommand::REPEAT_ONE
+                       : player_command == media_player::MEDIA_PLAYER_COMMAND_REPEAT_ALL
+                           ? media_source::MediaSourceCommand::REPEAT_ALL
+                           : media_source::MediaSourceCommand::REPEAT_OFF;
+        target_source->handle_command(command);
       }
       break;
 
