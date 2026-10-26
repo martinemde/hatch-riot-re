@@ -92,6 +92,13 @@ enum Command { MEDIA_PLAYER_COMMAND_STOP, MEDIA_PLAYER_COMMAND_REPEAT_ONE,
                MEDIA_PLAYER_COMMAND_REPEAT_OFF };
 }
 std::vector<std::string> events;
+namespace sendspin { enum class SendspinGoodbyeReason { USER_REQUEST }; }
+struct SendspinHub {
+  void disconnect_from_server(sendspin::SendspinGoodbyeReason reason) {
+    assert(reason == sendspin::SendspinGoodbyeReason::USER_REQUEST);
+    events.push_back("disconnect");
+  }
+} sendspin_hub;
 struct Player {
   struct Call {
     std::string event;
@@ -132,8 +139,9 @@ int main() {
       loop_sound.state = initially_on;
       events.clear(); choose_stock(option);
       assert(loop_sound.state);
-      assert(events.size() == (initially_on ? 2 : 3));
-      for (size_t i = 0; i + 1 < events.size(); ++i) assert(events[i] == "repeat_one");
+      assert(events.size() == (initially_on ? 3 : 4));
+      assert(events.front() == "disconnect");
+      for (size_t i = 1; i + 1 < events.size(); ++i) assert(events[i] == "repeat_one");
       assert(events.back().find("hatch-library:///Rest_Sounds/wav/") == 0);
       assert(events.back().rfind(".wav") == events.back().size() - 4);
     }
@@ -144,7 +152,7 @@ int main() {
     assert(loop_sound.state && events == std::vector<std::string>{"repeat_one"});
   }
   events.clear(); choose_stock("None");
-  assert(events == std::vector<std::string>{"stop"});
+  assert((events == std::vector<std::string>{"disconnect", "stop"}));
 }
 """)
     compile_run(tmp_path, "stock_sound", [source], [])

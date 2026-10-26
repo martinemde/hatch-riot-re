@@ -17,6 +17,13 @@ class Source : public MediaSource {
  void idle(){stop_pending=false;set_state_(MediaSourceState::IDLE);}
  void notify_audio_played(uint32_t n,int64_t)override{played+=n;}
 };
+// Model Sendspin while a pending start/group leave does not report IDLE on STOP.
+// Only an explicit disconnect releases it; it must not claim stock library URIs.
+class SmartSource : public Source {
+ public:
+ SmartSource(){internal=true;}
+ bool can_handle(const std::string& uri)const override{return uri.rfind("sendspin://",0)==0;}
+};
 struct Fixture {
  speaker_source::SpeakerSourceMediaPlayer player; speaker::Speaker speaker; Source source;
  Fixture(){player.set_speaker(0,&speaker);player.add_media_source(0,&source);player.set_volume_initial(.5);player.set_volume_min(0);player.set_volume_max(1);player.set_volume_increment(.05);player.setup();}
@@ -95,9 +102,64 @@ int main(int argc,char** argv){assert(argc>=2);std::string mode=argv[1];Fixture 
   f.ticks();if(mode=="smart_to_stock")assert(smart.stop_pending);smart.idle();f.ticks();
   assert(f.source.starts==1);assert(f.source.repeats);
   if(mode=="smart_to_stock") {
-   assert(!smart.commands.empty()&&smart.commands.front()==MediaSourceCommand::REPEAT_ONE);
+   assert(std::find(smart.commands.begin(),smart.commands.end(),MediaSourceCommand::REPEAT_ONE)!=smart.commands.end());
+   assert(smart.stops==1);
   }
   f.source.idle();f.ticks();assert(f.source.starts==2);
+ }else if(mode=="pending_smart_to_stock"||mode=="pending_stock_reselection"){
+  SmartSource smart;f.player.add_media_source(0,&smart);
+  smart.play_uri("sendspin://session");
+  // A pending Sendspin start may request its own URI while it already owns playback.
+  const bool self_start=mode=="pending_smart_to_stock";
+  f.player.make_call().set_media_url(self_start?"sendspin://current":"hatch-library:///rain.wav").perform();
+  f.ticks();assert(smart.stop_pending&&smart.stops==1);
+  assert(smart.get_state()==MediaSourceState::PLAYING&&f.source.starts==0);
+  // A stock selection disconnects Sendspin before submitting its replacement URI.
+  // Do not give the orchestrator a loop between disconnect and replacement.
+  smart.idle();
+  const std::string selected="hatch-library:///ocean.wav";
+  f.player.make_call().set_command(MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+  f.player.make_call().set_media_url(selected).perform();
+  f.ticks(100);
+  assert(smart.starts==1); // The stale self-request must not reclaim playback.
+  assert(f.source.starts==1&&f.source.uris.back()==selected); // No obsolete rain start either.
+  assert(f.source.repeats);
+  f.pcm(pcm);assert(f.speaker.accepted==pcm);
+  f.command(MEDIA_PLAYER_COMMAND_PAUSE);
+  assert(!f.source.commands.empty()&&f.source.commands.back()==MediaSourceCommand::PAUSE);
+ }else if(mode=="stop_pending_smart"){
+  SmartSource smart;f.player.add_media_source(0,&smart);
+  smart.play_uri("sendspin://session");
+  f.player.make_call().set_media_url("sendspin://current").perform();
+  f.ticks();assert(smart.stop_pending&&smart.stops==1&&f.source.starts==0);
+  // Stock None disconnects, then requests STOP rather than a replacement URI.
+  smart.idle();
+  f.command(MEDIA_PLAYER_COMMAND_STOP);f.ticks(100);
+  assert(smart.starts==1&&f.source.starts==0);
+  assert(f.player.state==MEDIA_PLAYER_STATE_IDLE);
+ }else if(mode=="replace_idle_before_loop"){
+  f.command(MEDIA_PLAYER_COMMAND_REPEAT_OFF);f.play();f.pcm(pcm);
+  f.player.make_call().set_media_url("hatch-library:///ocean.wav").perform();
+  // A source task can complete STOP before the main loop handles PLAY_URI.
+  assert(f.source.stop_pending&&f.source.stops==1);
+  assert(f.speaker.stops==1&&f.speaker.queued.empty());
+  f.source.idle();f.ticks(100);
+  assert(f.source.starts==2&&f.source.uris.back()=="hatch-library:///ocean.wav");
+  assert(f.source.stops==1&&f.speaker.stops==1); // Never send a second STOP.
+  f.pcm({21,22,23,24});assert((f.speaker.queued==std::vector<uint8_t>{21,22,23,24}));
+ }else if(mode=="replace_preserves_other_pipeline"){
+  speaker::Speaker announcement_speaker;Source announcement;
+  f.player.set_speaker(1,&announcement_speaker);f.player.add_media_source(1,&announcement);
+  f.player.make_call().set_announcement(true).set_media_url("hatch-library:///announcement.wav").perform();
+  f.player.make_call().set_announcement(true).set_command(MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+  f.player.make_call().set_command(MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+  f.player.make_call().set_media_url("hatch-library:///rain.wav").perform();
+  // Only the media pipeline's pending selection is superseded.
+  f.player.make_call().set_media_url("hatch-library:///ocean.wav").perform();
+  f.ticks();
+  assert(announcement.starts==1&&announcement.uris.back()=="hatch-library:///announcement.wav");
+  assert(f.source.starts==1&&f.source.uris.back()=="hatch-library:///ocean.wav");
+  assert(announcement.repeats&&f.source.repeats); // Queued SEND_COMMAND survives for both pipelines.
  }else if(mode=="stop"){
   f.command(MEDIA_PLAYER_COMMAND_REPEAT_ONE);f.play();f.pcm(pcm);f.command(MEDIA_PLAYER_COMMAND_STOP);
   assert(f.source.stop_pending);f.source.idle();f.speaker.drain();f.ticks(100);assert(f.source.starts==1);assert(f.player.state==MEDIA_PLAYER_STATE_IDLE);
