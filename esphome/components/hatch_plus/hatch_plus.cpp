@@ -5,6 +5,10 @@
 
 namespace esphome::hatch_plus {
 static const char *const TAG = "hatch_plus";
+static bool is_adjustment_action(const std::string &action) {
+  return action == "volume_up" || action == "volume_down" ||
+         action == "brightness_up" || action == "brightness_down";
+}
 void HatchPlus::setup() {
   preference_ = global_preferences->make_preference<FavoriteStore>(STORAGE_KEY);
   auto loaded = std::make_unique<FavoriteStore>();
@@ -258,9 +262,7 @@ void HatchPlus::loop() {
       finish_clicks_(button);
     }
     // Explicit hold mappings keep their release-only behavior.
-    const bool adjustment = button.tap == "volume_up" || button.tap == "volume_down" ||
-                            button.tap == "brightness_up" || button.tap == "brightness_down";
-    if (!button.pressed || button.scene_hold || button.hold != "none" || !adjustment) continue;
+    if (!button.pressed || button.scene_hold || button.hold != "none" || !is_adjustment_action(button.tap)) continue;
     if (!button.repeating) {
       if (static_cast<uint32_t>(now - button.pressed_at) < hold_ms_) continue;
       finish_clicks_(button);
@@ -319,7 +321,8 @@ void HatchPlus::button_event(const std::string &name, bool pressed) {
     } else {
       button.pressed = false;
       button.released_at = now;
-      if (++button.clicks == 3) finish_clicks_(button);
+      // Adjustment taps act on every release instead of joining a multi-click gesture.
+      if (++button.clicks == 3 || is_adjustment_action(button.tap)) finish_clicks_(button);
     }
     return;
   }
