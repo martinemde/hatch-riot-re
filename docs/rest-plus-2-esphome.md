@@ -112,6 +112,13 @@ button operations under the existing lock policy.
 
 ## Audio
 
+Selecting a Stock Sound first disconnects the current Sendspin session, including
+paused sessions, so it releases the audio pipeline. This also applies when
+reselecting the same sound or recalling a local preset. Choosing None disconnects
+Sendspin and stops playback. Sendspin remains enabled and discoverable; remote
+playback can reconnect later. A replacement URI discards older queued playback
+requests for that pipeline rather than waiting behind a stale request.
+
 Selecting a Stock Sound turns Loop Sound on and plays that sound repeatedly.
 You may turn Loop Sound off afterward. Other/custom URLs retain the existing
 Loop Sound behavior. The player also retains repeat mode when switching from
