@@ -8,8 +8,11 @@ blueprint:
 
     Match the event device name to your ESPHome node's device event field.
     Empty actions do nothing. Native firmware button actions still run; these
-    Home Assistant actions are additional. The optional lock gates only Home
-    Assistant actions and cannot undo native firmware actions.
+    Home Assistant actions are additional. Volume and brightness adjustment
+    mappings emit a separate tap for every short press, including rapid clicks;
+    double/triple actions apply only when the firmware mapping classifies them.
+    The optional lock gates only Home Assistant actions and cannot undo native
+    firmware actions.
   domain: automation
   homeassistant:
     min_version: 2024.10.0

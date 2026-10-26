@@ -19,11 +19,18 @@ actual ESPHome action ending `_send_text` with `message: "HELLO"`.
 ## Buttons and blueprint
 
 Each of the seven buttons emits `esphome.hatch_button` with `device`, `button`,
-and `gesture` (`tap`, `hold`, `double`, `triple`). The multi-click window defaults
-to 350 ms after release. Single/double actions wait for the window; triple fires
-on the third release. Hold is 800 ms; volume/brightness holds repeat every 150 ms.
-Double/triple do not execute the native single-tap action. Native tap/hold actions
-remain active; Home Assistant actions are additional.
+and `gesture` (`tap`, `hold`, `double`, `triple`). Buttons whose native `tap`
+action is `volume_up`, `volume_down`, `brightness_up`, or `brightness_down` apply
+one step and emit `tap` immediately on each short release, including rapid taps.
+These buttons do not emit `double` or `triple`.
+
+Other buttons use the multi-click window, which defaults to 350 ms after release.
+Single/double actions wait for the window; triple fires on the third release.
+Double/triple do not execute the native single-tap action. Hold is 800 ms;
+volume/brightness holds with no explicit hold action repeat every 150 ms, with
+no extra step on release. Explicit hold actions remain release-only; scene
+management keeps its separate thresholds. Native tap/hold actions remain active;
+Home Assistant actions are additional.
 
 Import `blueprints/automation/hatch-rest-plus-2/buttons.yaml` from this fork
 (**Hatch Rest+ 2 buttons**). Match the event device name to the sample's `${name}`
