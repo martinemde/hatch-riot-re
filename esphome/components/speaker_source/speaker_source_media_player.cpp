@@ -577,12 +577,10 @@ void SpeakerSourceMediaPlayer::handle_player_command_(media_player::MediaPlayerC
     }
 
     case media_player::MEDIA_PLAYER_COMMAND_STOP: {
-      if (!has_internal_playlist) {
-        this->cancel_timeout(PIPELINE_TIMEOUT_IDS[pipeline]);
-        ps.playlist.clear();
-        ps.shuffle_indices.clear();
-        ps.playlist_index = 0;
-      }
+      this->cancel_timeout(PIPELINE_TIMEOUT_IDS[pipeline]);
+      ps.playlist.clear();
+      ps.shuffle_indices.clear();
+      ps.playlist_index = 0;
       if (target_source != nullptr) {
         target_source->handle_command(media_source::MediaSourceCommand::STOP);
       }
@@ -680,6 +678,24 @@ void SpeakerSourceMediaPlayer::handle_player_command_(media_player::MediaPlayerC
   }
 }
 
+// A replacement URI must not wait behind an older play that is waiting for a source to release.
+// Keep transport/repeat commands and commands for the other pipeline in their original order.
+void SpeakerSourceMediaPlayer::discard_pending_playback_(uint8_t pipeline) {
+  std::vector<MediaPlayerControlCommand> retained;
+  MediaPlayerControlCommand command{};
+  while (xQueueReceive(this->media_control_command_queue_, &command, 0) == pdTRUE) {
+    if (command.pipeline == pipeline && command.type != MediaPlayerControlCommand::SEND_COMMAND) {
+      if (command.type == MediaPlayerControlCommand::PLAY_URI ||
+          command.type == MediaPlayerControlCommand::ENQUEUE_URI)
+        delete command.data.uri;
+    } else {
+      retained.push_back(command);
+    }
+  }
+  for (const auto &pending : retained)
+    xQueueSend(this->media_control_command_queue_, &pending, 0);
+}
+
 // THREAD CONTEXT: Called from main loop only. Entry points:
 // - HA/automation commands (direct)
 // - handle_play_uri_request_() via make_call().perform() (deferred from source tasks)
@@ -715,6 +731,8 @@ void SpeakerSourceMediaPlayer::control(const media_player::MediaPlayerCall &call
     if (enqueue) {
       control_command.type = MediaPlayerControlCommand::ENQUEUE_URI;
     } else {
+      this->cancel_timeout(PIPELINE_TIMEOUT_IDS[control_command.pipeline]);
+      this->discard_pending_playback_(control_command.pipeline);
       control_command.type = MediaPlayerControlCommand::PLAY_URI;
     }
     // Heap allocation is unavoidable: URIs from Home Assistant are arbitrary-length (media URLs with tokens
@@ -724,6 +742,16 @@ void SpeakerSourceMediaPlayer::control(const media_player::MediaPlayerCall &call
     if (xQueueSend(this->media_control_command_queue_, &control_command, 0) != pdTRUE) {
       delete control_command.data.uri;
       ESP_LOGE(TAG, "Queue full, URI dropped");
+    } else if (!enqueue) {
+      PipelineContext &ps = this->pipelines_[control_command.pipeline];
+      media_source::MediaSource *active_source = ps.active_source;
+      if (active_source != nullptr && active_source->get_state() != media_source::MediaSourceState::IDLE &&
+          ps.stopping_source != active_source) {
+        // Mark the stop before callbacks can report IDLE and advance the replacement playlist.
+        ps.stopping_source = active_source;
+        active_source->handle_command(media_source::MediaSourceCommand::STOP);
+        ps.speaker->stop();
+      }
     }
     return;
   }
@@ -751,6 +779,10 @@ void SpeakerSourceMediaPlayer::control(const media_player::MediaPlayerCall &call
         this->set_volume_(std::max(0.0f, this->volume - this->volume_increment_));
         break;
       default:
+        if (cmd.value() == media_player::MEDIA_PLAYER_COMMAND_STOP) {
+          this->cancel_timeout(PIPELINE_TIMEOUT_IDS[control_command.pipeline]);
+          this->discard_pending_playback_(control_command.pipeline);
+        }
         // Queue command for processing in loop()
         control_command.type = MediaPlayerControlCommand::SEND_COMMAND;
         control_command.data.command = cmd.value();

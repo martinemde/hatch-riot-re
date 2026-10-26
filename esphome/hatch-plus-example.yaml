@@ -267,6 +267,8 @@ select:
   - Rockabye
   set_action:
   - lambda: |-
+      // Local playback must release Sendspin even when its remote group is paused.
+      id(sendspin_hub).disconnect_from_server(sendspin::SendspinGoodbyeReason::USER_REQUEST);
       if (x == "None") {
         id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
         return;

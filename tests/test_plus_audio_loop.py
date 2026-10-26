@@ -24,7 +24,7 @@ def pipeline_exe(tmp_path_factory):
                     "-o", str(exe)], check=True)
     return exe
 
-@pytest.mark.parametrize("scenario", ["eof_repeat", "repeat_flags", "stop", "replace", "volume", "repeat_all", "smart_to_stock", "idle_smart_to_stock"])
+@pytest.mark.parametrize("scenario", ["eof_repeat", "repeat_flags", "stop", "replace", "volume", "repeat_all", "smart_to_stock", "idle_smart_to_stock", "pending_smart_to_stock", "pending_stock_reselection", "replace_idle_before_loop", "replace_preserves_other_pipeline", "stop_pending_smart"])
 def test_speaker_pipeline(pipeline_exe, scenario):
     subprocess.run([str(pipeline_exe), scenario], check=True)
 
