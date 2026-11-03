@@ -75,6 +75,24 @@ blueprint:
         entity:
           filter:
             - domain: [switch, input_boolean]
+    display_text_entity:
+      name: Display text (optional)
+      description: >-
+        The device's "Display Text" entity. With "Show Clock" below, the clock shows "Off" when a hold is
+        reached, like stock, until a second after the ring is released.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: text
+    show_clock_switch:
+      name: Show Clock switch (optional)
+      description: The device's "Show Clock" switch. Needed with "Display text" to show "Off".
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: switch
 
 mode: single
 max_exceeded: silent
@@ -93,6 +111,9 @@ variables:
   start_from: !input start_from
   hold_time: !input hold_time
   lock_switch: !input lock_switch
+  display_text_entity: !input display_text_entity
+  show_clock_switch: !input show_clock_switch
+  show_off: "{{ display_text_entity | length > 0 and show_clock_switch | length > 0 }}"
 
 conditions:
   - condition: template
@@ -104,9 +125,23 @@ actions:
     timeout:
       seconds: "{{ hold_time }}"
   - choose:
-      # Hold: everything off.
+      # Hold: show "Off" (the cue to let go), everything off.
       - conditions: "{{ not wait.completed }}"
         sequence:
+          - variables:
+              old_text: "{{ states(display_text_entity) if show_off else '' }}"
+              clock_was_on: "{{ show_off and is_state(show_clock_switch, 'on') }}"
+          # Text first, then clock off, so the old custom text never flashes up.
+          - if: "{{ show_off }}"
+            then:
+              - action: text.set_value
+                target:
+                  entity_id: "{{ display_text_entity }}"
+                data:
+                  value: "Off"
+              - action: switch.turn_off
+                target:
+                  entity_id: "{{ show_clock_switch }}"
           - action: light.turn_off
             target:
               entity_id: "{{ light_entity }}"
@@ -114,6 +149,24 @@ actions:
             target:
               entity_id: "{{ media_player_entity }}"
             continue_on_error: true
+          # Put the display back a second after release: clock first (if it was on), then the old text.
+          - if: "{{ show_off }}"
+            then:
+              - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+                timeout:
+                  seconds: 30
+              - delay:
+                  seconds: 1
+              - if: "{{ clock_was_on }}"
+                then:
+                  - action: switch.turn_on
+                    target:
+                      entity_id: "{{ show_clock_switch }}"
+              - action: text.set_value
+                target:
+                  entity_id: "{{ display_text_entity }}"
+                data:
+                  value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
       # Tap: next favorite.
       - conditions: "{{ favorites | count > 0 }}"
         sequence:
