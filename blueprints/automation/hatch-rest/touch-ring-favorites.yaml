@@ -123,7 +123,9 @@ conditions:
 actions:
   # The display as it was before the touch, put back once the ring has been left alone for a second.
   - variables:
-      old_text: "{{ states(display_text_entity) if use_display else '' }}"
+      old_text: >-
+        {% set t = states(display_text_entity) if use_display else '' %}
+        {{ '' if t in ['unknown', 'unavailable'] else t }}
       clock_was_on: "{{ use_display and is_state(show_clock_switch, 'on') }}"
   # One pass per touch. While a favorite number is on the display the run stays alive and handles further touches
   # itself (mode: single would drop them), so the display is only put back after the last one.
@@ -169,11 +171,21 @@ actions:
                         - action: switch.turn_on
                           target:
                             entity_id: "{{ show_clock_switch }}"
-                    - action: text.set_value
-                      target:
-                        entity_id: "{{ display_text_entity }}"
-                      data:
-                        value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
+                    # Blank text is put back as a space: setting an empty value left the number up, and a template
+                    # can't produce a lone space (HA strips template output), so it's a plain string.
+                    - if: "{{ old_text | trim | length > 0 }}"
+                      then:
+                        - action: text.set_value
+                          target:
+                            entity_id: "{{ display_text_entity }}"
+                          data:
+                            value: "{{ old_text }}"
+                      else:
+                        - action: text.set_value
+                          target:
+                            entity_id: "{{ display_text_entity }}"
+                          data:
+                            value: " "
                 - stop: Held
             # Tap: next favorite.
             - conditions: "{{ favorites | count > 0 }}"
@@ -236,8 +248,18 @@ actions:
           - action: switch.turn_on
             target:
               entity_id: "{{ show_clock_switch }}"
-      - action: text.set_value
-        target:
-          entity_id: "{{ display_text_entity }}"
-        data:
-          value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
+      # Blank text is put back as a space: setting an empty value left the number up, and a template
+      # can't produce a lone space (HA strips template output), so it's a plain string.
+      - if: "{{ old_text | trim | length > 0 }}"
+        then:
+          - action: text.set_value
+            target:
+              entity_id: "{{ display_text_entity }}"
+            data:
+              value: "{{ old_text }}"
+        else:
+          - action: text.set_value
+            target:
+              entity_id: "{{ display_text_entity }}"
+            data:
+              value: " "
