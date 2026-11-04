@@ -2,7 +2,8 @@ blueprint:
   name: Hatch Rest touch ring favorites
   description: >-
     Replicates the stock Hatch Rest touch ring. **Tap** to cycle through a list of favorites (scenes or scripts that
-    set the night light and speaker). **Touch and hold** to turn the light and sound off.
+    set the night light and speaker). **Touch and hold** to turn the light and sound off (optional: set the hold
+    time to 0 to turn it off, so every touch is a tap).
 
 
     Each tap activates the favorite after the one activated most recently, wrapping round at the end. While the light
@@ -58,11 +59,13 @@ blueprint:
               value: next
     hold_time:
       name: Hold time
-      description: How long the ring must be held to turn everything off (stock is 1 second).
+      description: >-
+        How long the ring must be held to turn everything off (stock is 1 second). 0 turns holding off: every touch
+        is a tap, and it acts as soon as the ring is touched rather than on release.
       default: 1
       selector:
         number:
-          min: 0.3
+          min: 0
           max: 5
           step: 0.1
           unit_of_measurement: s
@@ -111,6 +114,7 @@ variables:
   favorites: !input favorites
   start_from: !input start_from
   hold_time: !input hold_time
+  hold_enabled: "{{ hold_time | float(0) > 0 }}"
   lock_switch: !input lock_switch
   display_text_entity: !input display_text_entity
   show_clock_switch: !input show_clock_switch
@@ -132,13 +136,15 @@ actions:
   - repeat:
       sequence:
         # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step
-        # runs.
-        - wait_template: "{{ is_state(touch_sensor, 'off') }}"
-          timeout:
-            seconds: "{{ hold_time }}"
+        # runs. With hold_time 0 there's no hold, so a touch is a tap straight away.
+        - if: "{{ hold_enabled }}"
+          then:
+            - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+              timeout:
+                seconds: "{{ hold_time }}"
         - choose:
             # Hold: show "Off" (the cue to let go), everything off.
-            - conditions: "{{ not wait.completed }}"
+            - conditions: "{{ hold_enabled and not wait.completed }}"
               sequence:
                 # Text first, then clock off, so the old custom text never flashes up.
                 - if: "{{ use_display }}"
@@ -235,6 +241,13 @@ actions:
         # Keep the number up for a second after release; another touch in that time is handled by the next pass.
         - if: "{{ use_display }}"
           then:
+            # Without a hold the tap acted on touch, so the ring may still be held: wait for the release first, or
+            # the next wait would see it as another touch.
+            - if: "{{ not hold_enabled }}"
+              then:
+                - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+                  timeout:
+                    seconds: 30
             - wait_template: "{{ is_state(touch_sensor, 'on') }}"
               timeout:
                 seconds: 1
