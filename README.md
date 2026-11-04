@@ -94,8 +94,8 @@ These parts needed custom code (local components in [`esphome/components/`](esph
 brings back the stock touch ring in Home Assistant: **tap** to cycle through a list of favorites (scenes or scripts
 that set the light and speaker), **touch and hold** (1 s, like stock) to turn the light and sound off. Pick the touch
 sensor, light, media player and favorites when creating the automation; optionally pick the Toddler Lock switch so
-the ring is ignored while it's on, and the Display Text entity and Show Clock switch so the clock shows "Off" when a
-hold is reached, like stock. Needs Home Assistant 2024.10 or later.
+the ring is ignored while it's on, and the Display Text entity and Show Clock switch so the clock shows the
+favorite's number (1, 2, ...) on a tap and "Off" when a hold is reached, like stock. Needs Home Assistant 2024.10 or later.
 
 [![Import blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fw1ll1am23%2Fhatch-riot-re%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fhatch-rest%2Ftouch-ring-favorites.yaml)
 

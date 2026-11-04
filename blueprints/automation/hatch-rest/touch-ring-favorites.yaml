@@ -78,8 +78,9 @@ blueprint:
     display_text_entity:
       name: Display text (optional)
       description: >-
-        The device's "Display Text" entity. With "Show Clock" below, the clock shows "Off" when a hold is
-        reached, like stock, until a second after the ring is released.
+        The device's "Display Text" entity. With "Show Clock" below, the clock shows the favorite's number
+        (1, 2, ...) on a tap and "Off" when a hold is reached, like stock, until a second after the ring is
+        released.
       default: []
       selector:
         entity:
@@ -87,7 +88,7 @@ blueprint:
             - domain: text
     show_clock_switch:
       name: Show Clock switch (optional)
-      description: The device's "Show Clock" switch. Needed with "Display text" to show "Off".
+      description: The device's "Show Clock" switch. Needed with "Display text" to show the favorite number and "Off".
       default: []
       selector:
         entity:
@@ -113,88 +114,130 @@ variables:
   lock_switch: !input lock_switch
   display_text_entity: !input display_text_entity
   show_clock_switch: !input show_clock_switch
-  show_off: "{{ display_text_entity | length > 0 and show_clock_switch | length > 0 }}"
+  use_display: "{{ display_text_entity | length > 0 and show_clock_switch | length > 0 }}"
 
 conditions:
   - condition: template
     value_template: "{{ not lock_switch or not is_state(lock_switch, 'on') }}"
 
 actions:
-  # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step runs.
-  - wait_template: "{{ is_state(touch_sensor, 'off') }}"
-    timeout:
-      seconds: "{{ hold_time }}"
-  - choose:
-      # Hold: show "Off" (the cue to let go), everything off.
-      - conditions: "{{ not wait.completed }}"
-        sequence:
-          - variables:
-              old_text: "{{ states(display_text_entity) if show_off else '' }}"
-              clock_was_on: "{{ show_off and is_state(show_clock_switch, 'on') }}"
-          # Text first, then clock off, so the old custom text never flashes up.
-          - if: "{{ show_off }}"
-            then:
-              - action: text.set_value
-                target:
-                  entity_id: "{{ display_text_entity }}"
-                data:
-                  value: "Off"
-              - action: switch.turn_off
-                target:
-                  entity_id: "{{ show_clock_switch }}"
-          - action: light.turn_off
+  # The display as it was before the touch, put back once the ring has been left alone for a second.
+  - variables:
+      old_text: "{{ states(display_text_entity) if use_display else '' }}"
+      clock_was_on: "{{ use_display and is_state(show_clock_switch, 'on') }}"
+  # One pass per touch. While a favorite number is on the display the run stays alive and handles further touches
+  # itself (mode: single would drop them), so the display is only put back after the last one.
+  - repeat:
+      sequence:
+        # Tap = released within hold_time. A template wait (not a trigger) also catches a release before this step
+        # runs.
+        - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+          timeout:
+            seconds: "{{ hold_time }}"
+        - choose:
+            # Hold: show "Off" (the cue to let go), everything off.
+            - conditions: "{{ not wait.completed }}"
+              sequence:
+                # Text first, then clock off, so the old custom text never flashes up.
+                - if: "{{ use_display }}"
+                  then:
+                    - action: text.set_value
+                      target:
+                        entity_id: "{{ display_text_entity }}"
+                      data:
+                        value: "Off"
+                    - action: switch.turn_off
+                      target:
+                        entity_id: "{{ show_clock_switch }}"
+                - action: light.turn_off
+                  target:
+                    entity_id: "{{ light_entity }}"
+                - action: media_player.media_stop
+                  target:
+                    entity_id: "{{ media_player_entity }}"
+                  continue_on_error: true
+                # Put the display back a second after release: clock first (if it was on), then the old text.
+                - if: "{{ use_display }}"
+                  then:
+                    - wait_template: "{{ is_state(touch_sensor, 'off') }}"
+                      timeout:
+                        seconds: 30
+                    - delay:
+                        seconds: 1
+                    - if: "{{ clock_was_on }}"
+                      then:
+                        - action: switch.turn_on
+                          target:
+                            entity_id: "{{ show_clock_switch }}"
+                    - action: text.set_value
+                      target:
+                        entity_id: "{{ display_text_entity }}"
+                      data:
+                        value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
+                - stop: Held
+            # Tap: next favorite.
+            - conditions: "{{ favorites | count > 0 }}"
+              sequence:
+                - variables:
+                    # The favorite activated most recently: a scene's state is its last activation time, a script
+                    # has last_triggered. -1 if none has been used yet.
+                    last_index: >-
+                      {% set ns = namespace(index=-1, ts=0) %}
+                      {% for e in favorites %}
+                        {% set t = as_timestamp(states(e) if e.startswith('scene.') else state_attr(e, 'last_triggered'), 0) %}
+                        {% if t > ns.ts %}{% set ns.index = loop.index0 %}{% set ns.ts = t %}{% endif %}
+                      {% endfor %}
+                      {{ ns.index }}
+                    # Only the first tap of a run looks at "Tap when off": later ones follow a favorite that was
+                    # just activated, whose light / sound may not be on yet.
+                    all_off: >-
+                      {{ repeat.index == 1
+                         and not is_state(light_entity, 'on')
+                         and states(media_player_entity) not in ['playing', 'buffering'] }}
+                    next_index: >-
+                      {% set n = favorites | count %}
+                      {% if all_off and start_from == 'first' %}0
+                      {% elif all_off and start_from == 'resume' %}{{ [last_index, 0] | max }}
+                      {% else %}{{ (last_index + 1) % n }}{% endif %}
+                    target_favorite: "{{ favorites[next_index | int] }}"
+                # Show the favorite's number (1-based), text first, then clock off, as for "Off".
+                - if: "{{ use_display }}"
+                  then:
+                    - action: text.set_value
+                      target:
+                        entity_id: "{{ display_text_entity }}"
+                      data:
+                        value: "{{ next_index | int + 1 }}"
+                    - action: switch.turn_off
+                      target:
+                        entity_id: "{{ show_clock_switch }}"
+                - if: "{{ target_favorite.startswith('scene.') }}"
+                  then:
+                    - action: scene.turn_on
+                      target:
+                        entity_id: "{{ target_favorite }}"
+                  else:
+                    - action: script.turn_on
+                      target:
+                        entity_id: "{{ target_favorite }}"
+        # Keep the number up for a second after release; another touch in that time is handled by the next pass.
+        - if: "{{ use_display }}"
+          then:
+            - wait_template: "{{ is_state(touch_sensor, 'on') }}"
+              timeout:
+                seconds: 1
+      # Done unless that wait saw the ring touched again.
+      until: "{{ not use_display or not is_state(touch_sensor, 'on') }}"
+  # Put the display back: clock first (if it was on), then the old text.
+  - if: "{{ use_display }}"
+    then:
+      - if: "{{ clock_was_on }}"
+        then:
+          - action: switch.turn_on
             target:
-              entity_id: "{{ light_entity }}"
-          - action: media_player.media_stop
-            target:
-              entity_id: "{{ media_player_entity }}"
-            continue_on_error: true
-          # Put the display back a second after release: clock first (if it was on), then the old text.
-          - if: "{{ show_off }}"
-            then:
-              - wait_template: "{{ is_state(touch_sensor, 'off') }}"
-                timeout:
-                  seconds: 30
-              - delay:
-                  seconds: 1
-              - if: "{{ clock_was_on }}"
-                then:
-                  - action: switch.turn_on
-                    target:
-                      entity_id: "{{ show_clock_switch }}"
-              - action: text.set_value
-                target:
-                  entity_id: "{{ display_text_entity }}"
-                data:
-                  value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
-      # Tap: next favorite.
-      - conditions: "{{ favorites | count > 0 }}"
-        sequence:
-          - variables:
-              # The favorite activated most recently: a scene's state is its last activation time, a script has
-              # last_triggered. -1 if none has been used yet.
-              last_index: >-
-                {% set ns = namespace(index=-1, ts=0) %}
-                {% for e in favorites %}
-                  {% set t = as_timestamp(states(e) if e.startswith('scene.') else state_attr(e, 'last_triggered'), 0) %}
-                  {% if t > ns.ts %}{% set ns.index = loop.index0 %}{% set ns.ts = t %}{% endif %}
-                {% endfor %}
-                {{ ns.index }}
-              all_off: >-
-                {{ not is_state(light_entity, 'on')
-                   and states(media_player_entity) not in ['playing', 'buffering'] }}
-              next_index: >-
-                {% set n = favorites | count %}
-                {% if all_off and start_from == 'first' %}0
-                {% elif all_off and start_from == 'resume' %}{{ [last_index, 0] | max }}
-                {% else %}{{ (last_index + 1) % n }}{% endif %}
-              target_favorite: "{{ favorites[next_index | int] }}"
-          - if: "{{ target_favorite.startswith('scene.') }}"
-            then:
-              - action: scene.turn_on
-                target:
-                  entity_id: "{{ target_favorite }}"
-            else:
-              - action: script.turn_on
-                target:
-                  entity_id: "{{ target_favorite }}"
+              entity_id: "{{ show_clock_switch }}"
+      - action: text.set_value
+        target:
+          entity_id: "{{ display_text_entity }}"
+        data:
+          value: "{{ '' if old_text in ['unknown', 'unavailable'] else old_text }}"
