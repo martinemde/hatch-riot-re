@@ -20,13 +20,23 @@ on the device** (2026-10-12):
 
 Known gaps: Home Assistant TTS / URL playback depends on HA's ffmpeg proxy (it returned empty streams in testing;
 Music Assistant is unaffected), the status LEDs show on a short press of the bottom button (for 30 s) rather than
-when tipped over like stock, the bottom button has no hold action, and **RIoT+ (Rest+ 2nd gen) is not supported**. Details and the component list are in
+when tipped over like stock, the bottom button has no hold action, and **this replacement config does not support RIoT+ (Rest+ 2nd gen)**. Details and the component list are in
 [docs/esphome-plan.md](docs/esphome-plan.md#replacement-config); flashing and setup are in
 [esphome/README.md](esphome/README.md). Back up the flash with [`scripts/backup.sh`](scripts/backup.sh) first.
 
 The hardware map was worked out by **static analysis** of the stock firmware (Capstone, then Ghidra) and confirmed
 pin by pin on the device with a diagnostic [probe firmware](docs/probe-firmware.md) and a
 [teardown](docs/teardown.md). See [docs/open-questions.md](docs/open-questions.md) for what's still open.
+
+## Local Rest+ BLE flasher
+
+[`flasher/`](flasher/README.md) is an independent experimental local tool for
+stock Wi-Fi setup and application-only first installs on **Rest+ 2nd gen
+(HBRESTPLUS2)**. Tested stock routes are 7.1.645 (WSUP) and 7.1.503 (state.rF).
+It includes a localhost dashboard, Python server and offline tests; it does not
+include a Rest+ firmware configuration or change the Rest firmware's support.
+**Do not flash the Rest YAML onto Rest+.** Other models, including Rest, are not
+verified with this flasher. Read its safety and recovery limits before use.
 
 ## Target
 
