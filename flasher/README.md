@@ -113,7 +113,7 @@ From the repository root (Python3.13 and `uv`):
 
 ```sh
 uv venv .venv-flasher
-uv pip install --python .venv-flasher/bin/python esphome==2026.9.1 -r flasher/requirements.txt
+uv pip install --python .venv-flasher/bin/python esphome==2026.10.0 -r flasher/requirements.txt
 cp esphome/secrets.yaml.example esphome/secrets.yaml
 # Edit secrets.yaml: your Wi-Fi credentials and a unique 32-byte base64 key.
 .venv-flasher/bin/esphome compile esphome/hatch-plus-example.yaml

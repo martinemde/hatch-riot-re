@@ -86,7 +86,7 @@ These parts needed custom code (local components in [`esphome/components/`](esph
 
 ## ESPHome firmware
 
-- [`esphome/hatch-rest.yaml`](esphome/hatch-rest.yaml): **the stock replacement** (builds with ESPHome 2026.9.1),
+- [`esphome/hatch-rest.yaml`](esphome/hatch-rest.yaml): **the stock replacement** (builds with ESPHome 2026.10.0),
   with local components `hatch_expander`, `hatch_display` and `hatch_status_led`.
 - `esphome/hatch-riot-probe.yaml`: a read-mostly diagnostic firmware used to confirm the hardware map, plus a local
   `riot_probe` component.
