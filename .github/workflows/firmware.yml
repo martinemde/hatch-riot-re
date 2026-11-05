@@ -1,0 +1,47 @@
+name: Firmware build check
+on:
+  workflow_dispatch:
+  push:
+    paths: ['esphome/**', '.github/workflows/firmware.yml']
+  pull_request:
+    paths: ['esphome/**', '.github/workflows/firmware.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    name: Compile (ESPHome ${{ matrix.esphome }})
+    # The pinned version is the gate; latest is an early-warning build that may fail on upstream changes.
+    continue-on-error: ${{ matrix.esphome == 'latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        esphome: ['2026.10.0', latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ESPHome
+        run: |
+          if [ "${{ matrix.esphome }}" = "latest" ]; then
+            pip install esphome
+          else
+            pip install "esphome==${{ matrix.esphome }}"
+          fi
+      - name: Generate disposable build-check secrets
+        shell: python
+        run: |
+          import base64, pathlib, secrets
+          key = base64.b64encode(secrets.token_bytes(32)).decode()
+          pathlib.Path('esphome/secrets.yaml').write_text(
+              'wifi_ssid: "CI-BUILD-CHECK-NOT-FOR-FLASHING"\n'
+              'wifi_password: "' + secrets.token_urlsafe(24) + '"\n'
+              'fallback_ap_password: "' + secrets.token_urlsafe(24) + '"\n'
+              'api_encryption_key: "' + key + '"\n')
+      - name: Compile example (validation only)
+        run: esphome compile esphome/hatch-rest.yaml
+      # Deliberately do not publish this binary: it contains CI-only credentials.
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f esphome/secrets.yaml
