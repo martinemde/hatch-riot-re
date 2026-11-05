@@ -30,7 +30,7 @@ namespace esphome::speaker_source {
 //   handle_volume_request_(), handle_mute_request_(), handle_play_uri_request_(),
 //   set_volume_(), set_mute_state_(), control(), get_source_state_(),
 //   find_source_for_uri_(), try_execute_play_uri_(), save_volume_restore_state_(),
-//   process_control_queue_(), handle_player_command_(), queue_command_(), queue_play_current_()
+//   process_control_queue_(), discard_pending_playback_(), handle_player_command_(), queue_command_(), queue_play_current_()
 //
 // - Media source task(s): handle_media_output_() via SourceBinding::write_audio().
 //   Called from each source's decode task thread when streaming audio data.
@@ -218,6 +218,7 @@ class SpeakerSourceMediaPlayer final : public Component, public media_player::Me
                                                    media_player::MediaPlayerState old_state) const;
 
   void process_control_queue_();
+  void discard_pending_playback_(uint8_t pipeline);
   void handle_player_command_(media_player::MediaPlayerCommand player_command, uint8_t pipeline);
   bool try_execute_play_uri_(const std::string &uri, uint8_t pipeline);
   media_source::MediaSource *find_source_for_uri_(const std::string &uri, uint8_t pipeline);
