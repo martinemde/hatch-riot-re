@@ -1,9 +1,9 @@
 # Rest+ 2 ESPHome example
 
 `esphome/hatch-plus-example.yaml` is a private-build development example, not a
-hardware-safety-approved image. Keep its experimental warnings and disabled power
-control. This update does not establish charging, thermal, shutdown or recovery
-safety. Use your own ignored `esphome/secrets.yaml` for `wifi_ssid`,
+hardware-safety-approved image. It enables experimental power control to match
+the deployed configuration. This does not establish charging, thermal, shutdown
+or recovery safety. Use your own ignored `esphome/secrets.yaml` for `wifi_ssid`,
 `wifi_password`, and a unique ESPHome `encryption_key`. Never publish rendered
 configuration, flash backups, or device certificates.
 
@@ -159,8 +159,9 @@ explicit permission and recovery planning.
 `hatch_accelerometer` exposes optional DA213 axes, tilt and orientation. Its
 `allow_initialization` defaults false (read-only discovery). The
 `hatch_plus_indicator_probe` component performs read-only register logging and
-creates no Home Assistant entities. The main example enables `hatch_plus_indicator` for the three bottom status
-lights; it does not enable the accelerometer or read-only indicator probe. See
+creates no Home Assistant entities. The main example enables the accelerometer
+with initialization and `hatch_plus_indicator` for the three bottom status
+lights; it does not enable the read-only indicator probe. See
 [bottom indicator lights](rest-plus-indicators.md) for Automatic/manual behavior
 and limitations.
 
