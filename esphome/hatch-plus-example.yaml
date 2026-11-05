@@ -1,6 +1,6 @@
-# DEVELOPMENT ONLY. Power parity is incomplete. DO NOT FLASH ON A HATCH.
-# Private build example: provide your own git-ignored secrets.yaml.
-# This is not a universal prebuilt image; each device needs its own encryption key.
+# Hatch Rest+ 2nd gen ESPHome example. See docs/rest-plus-2-esphome.md.
+# Private build: provide your own git-ignored secrets.yaml with wifi_ssid, wifi_password and
+# encryption_key. This is not a universal prebuilt image; each device needs its own encryption key.
 substitutions:
   name: hatch-plus-example
   friendly_name: Hatch Plus Example
@@ -8,7 +8,7 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   name_add_mac_suffix: true
-  comment: 'UNVALIDATED Plus development build: power management incomplete; DO NOT FLASH HATCH'
+  comment: 'Hatch Rest+ 2 ESPHome example build'
   on_boot:
   - priority: -100
     then:
@@ -24,7 +24,7 @@ esp32:
 psram:
   mode: quad
   speed: 80MHz
-logger: null
+logger:
 api:
   encryption:
     key: !secret encryption_key
@@ -544,23 +544,47 @@ external_components:
   - sd_cache
   - speaker_source
   - hatch_plus
+  - hatch_accelerometer
   - hatch_plus_power
   - hatch_plus_indicator
-# Shared Plus peripheral owner (stock physical port1). Not a deployment claim.
+# Shared Plus peripheral owner (stock physical port1). The GreenPAK and DA213 accelerometer sit on
+# this bus; pull-ups are external, so the ESP32's internal ones stay off.
 i2c:
   id: plus_bus1
   sda: GPIO13
   scl: GPIO23
+  sda_pullup_enabled: false
+  scl_pullup_enabled: false
   scan: false
   frequency: 100kHz
+
+# DA213 accelerometer (0x27) on the expander's bit-banged bus.
+hatch_accelerometer:
+  id: accelerometer
+  hatch_expander_id: io_exp
+  allow_initialization: true
+  acceleration_x:
+    name: Acceleration X
+  acceleration_y:
+    name: Acceleration Y
+  acceleration_z:
+    name: Acceleration Z
+  upright:
+    name: Upright
+  not_upright:
+    name: Not Upright
+  tilt_angle:
+    name: Tilt Angle
+  update_interval: 1s
 
 hatch_plus_power:
   i2c_id: plus_bus1
   id: plus_power_diagnostics
   hatch_expander_id: io_exp
   acknowledge_experimental_power_risks: true
-  # Charging/thermal/shutdown control is experimental and not hardware-safety approved.
-  allow_control: false
+  # Drives the stock load controller (night light, amp) and the battery management copied from the
+  # stock firmware, including charging and shutdown. Also drives the status indicators.
+  allow_control: true
   # Erases/programs GreenPAK NVM on mismatch; requires separate recovery approval.
   allow_nvm_programming: false
   light_id: night_light
