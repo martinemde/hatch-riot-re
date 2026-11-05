@@ -65,7 +65,7 @@ only their field, including the lock field spanning two bytes. Existing original
 instruction tests cover the generic RMW helper; physical colours still need
 confirmation on the Plus hardware. No flashing is implied by source integration.
 
-Validation (2026-11-03): full ESPHome 2026.9.1 compile of the local
+Validation (2026-11-03): full ESPHome 2026.10.0 compile of the local
 `homeassistant/esphome/hatch-plus.yaml` passed, including all three lights.
 Focused indicator, owner, register-transport, schema and metadata suite:
 45 passed, 1 skipped (opt-in stock QEMU execution). No OTA upload performed.

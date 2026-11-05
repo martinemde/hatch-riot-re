@@ -24,7 +24,7 @@
 ## Build
 
 ```sh
-python3 -m venv ../.venv-esphome && ../.venv-esphome/bin/pip install esphome   # tested with 2026.9.1
+python3 -m venv ../.venv-esphome && ../.venv-esphome/bin/pip install esphome==2026.10.0
 ../.venv-esphome/bin/pip install 'bitstring>=4,<5'   # see note below
 cp secrets.yaml.example secrets.yaml && $EDITOR secrets.yaml
 ../.venv-esphome/bin/esphome compile hatch-riot-probe.yaml
