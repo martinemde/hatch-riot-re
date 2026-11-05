@@ -193,6 +193,9 @@ media_source:
       hatch_expander: io_exp
       number: 9
       mode: output
+    # Read-only browsing of the stock sound directories on the card (hatch-library:// URIs). The cache itself
+    # stays inside its own directory; stock files are never written or evicted.
+    library_enabled: true
   - platform: audio_http
     id: http_source
   - platform: sendspin
@@ -230,7 +233,69 @@ media_player:
           else:
             - script.execute: amp_on_after_clocks
 
+select:
+  # The stock sounds on the card, playable again without the Hatch app. Picking one loops it (Loop Sound);
+  # "None" stops playback. The file list matches the stock card layout (Rest_Sounds/wav).
+  - platform: template
+    id: stock_sound
+    name: Stock Sound
+    icon: mdi:music-note
+    optimistic: true
+    restore_value: true
+    initial_option: None
+    options:
+      - None
+      - Heartbeat
+      - Stream
+      - Pink Noise
+      - Dryer
+      - Ocean
+      - Wind
+      - Rain
+      - Birds
+      - Crickets
+      - Brahms
+      - Twinkle
+      - Rockabye
+    set_action:
+      - lambda: |-
+          // Local playback must release Sendspin even when its remote group is paused.
+          id(sendspin_hub).disconnect_from_server(sendspin::SendspinGoodbyeReason::USER_REQUEST);
+          if (x == "None") {
+            id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
+            return;
+          }
+          std::string filename;
+          if (x == "Heartbeat") filename = "001_heartbeat.wav";
+          if (x == "Stream") filename = "002_waterstreamsmallclose16.wav";
+          if (x == "Pink Noise") filename = "003_pinknoise16.wav";
+          if (x == "Dryer") filename = "004_dryerclothes16.wav";
+          if (x == "Ocean") filename = "005_oceanwaves16.wav";
+          if (x == "Wind") filename = "006_wind16.wav";
+          if (x == "Rain") filename = "007_rain16.wav";
+          if (x == "Birds") filename = "009_birdschorus16.wav";
+          if (x == "Crickets") filename = "010_crickets16.wav";
+          if (x == "Brahms") filename = "011_brahms16.wav";
+          if (x == "Twinkle") filename = "013_twinkle16.wav";
+          if (x == "Rockabye") filename = "014_rockabye16.wav";
+          if (filename.empty()) return;
+          id(loop_sound).turn_on();
+          id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+          id(player).make_call().set_media_url("hatch-library:///Rest_Sounds/wav/" + filename).perform();
+
 switch:
+  # Repeats the current track (used by the Stock Sound select, but works for any source).
+  - platform: template
+    id: loop_sound
+    name: Loop Sound
+    icon: mdi:repeat
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - lambda: id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_ONE).perform();
+    on_turn_off:
+      - lambda: id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_REPEAT_OFF).perform();
+
   # Amp enable (P1_2): on only while playing. Silent when off, confirmed on hardware.
   - platform: gpio
     id: amp
