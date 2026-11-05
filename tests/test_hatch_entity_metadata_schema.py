@@ -34,10 +34,7 @@ ACCELEROMETER_METADATA = {
 
 
 def power_config(**options):
-    return {
-        "hatch_expander_id": "expander", "i2c_id": "bus1",
-        "acknowledge_experimental_power_risks": True, **options,
-    }
+    return {"hatch_expander_id": "expander", "i2c_id": "bus1", **options}
 
 
 def assert_metadata(entity, expected):

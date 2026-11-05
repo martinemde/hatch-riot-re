@@ -144,12 +144,11 @@ class is inferred from raw status flags. Cache size uses data_size/MB/measuremen
 ## Experimental power and peripheral components
 
 The sample uses the shared GPIO13/23 I²C bus for GreenPAK/receiver access;
-the load expander remains on GPIO0/22. The power schema requires
-`i2c_id` and `acknowledge_experimental_power_risks: true`. This replaces the old
-`acknowledge_not_power_management` option. The main example keeps `allow_control`
-and `allow_nvm_programming` false. The dedicated power-development configuration
-explicitly enables experimental control but keeps NVM programming disabled.
-Do not flash that configuration without reviewing its warnings.
+the load expander remains on GPIO0/22. The power schema requires `i2c_id`.
+`allow_control` (off by default) lets the component drive the stock load
+controller and battery management; the main example enables it, matching the
+deployed configuration. NVM programming stays opt-in (`allow_nvm_programming`,
+requires `allow_control`) and is off in all shipped configurations.
 
 Optional battery-report age/acceptance and owner-fault diagnostics are available.
 Acceptance is not proof of electrical validity; the fault indicator is not a

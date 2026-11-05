@@ -581,12 +581,9 @@ hatch_plus_power:
   i2c_id: plus_bus1
   id: plus_power_diagnostics
   hatch_expander_id: io_exp
-  acknowledge_experimental_power_risks: true
   # Drives the stock load controller (night light, amp) and the battery management copied from the
   # stock firmware, including charging and shutdown. Also drives the status indicators.
   allow_control: true
-  # Erases/programs GreenPAK NVM on mismatch; requires separate recovery approval.
-  allow_nvm_programming: false
   light_id: night_light
   media_player_id: player
   speaker_id: spk

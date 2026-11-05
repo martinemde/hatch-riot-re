@@ -479,7 +479,6 @@ hatch_plus_power:
   i2c_id: plus_bus1
   id: plus_power_diagnostics
   hatch_expander_id: io_exp
-  acknowledge_experimental_power_risks: true
   external_power_present:
     name: External Power Present
   wireless_voltage_present:
