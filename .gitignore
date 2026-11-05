@@ -6,6 +6,7 @@ firmware/
 work/
 
 .venv/
+.venv-flasher/
 __pycache__/
 .venv-esphome/
 
