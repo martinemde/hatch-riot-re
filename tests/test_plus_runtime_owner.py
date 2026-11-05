@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_runtime_owner_lifecycle(tmp_path):
  actual=(ROOT/"esphome/components/hatch_plus_power/hatch_plus_power.cpp").read_text()
  methods=[]
- for name in ("prepare","state_shutdown","led_busy","loop","publish_hardware_status_","update","source_changed"):
+ for name in ("prepare","state_shutdown","led_busy","loop","publish_hardware_status_","update","source_changed","display","power_off_result"):
   signature=("bool" if name=="led_busy" else "void")+" HatchPlusPower::"+name+("()" if name=="update" else "(")
   start=actual.index(signature);brace=actual.index("{",start);depth=1;end=brace+1
   while depth:
@@ -14,7 +14,7 @@ def test_runtime_owner_lifecycle(tmp_path):
  fixture=(ROOT/"tests/host/power_runtime_owner_test.cpp").read_text()
  source=tmp_path/"owner.cpp";source.write_text(fixture.replace("// OWNER_METHODS","\n".join(methods)))
  exe=tmp_path/"owner"
- subprocess.run(["c++","-std=c++17","-Wall","-Wextra","-Werror","-I",str(ROOT),str(source),"-o",str(exe)],check=True)
+ subprocess.run(["c++","-std=c++17","-Wall","-Wextra","-Werror","-I",str(ROOT/"tests/host/display"),"-I",str(ROOT/"esphome/components/hatch_display"),"-I",str(ROOT),str(source),str(ROOT/"esphome/components/hatch_display/hatch_display.cpp"),"-o",str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
 
 def test_runtime_owner_setup_failures(tmp_path):

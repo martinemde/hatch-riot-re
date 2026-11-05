@@ -10,6 +10,9 @@
 #include "pwm_output_state.h"
 #include "driver/ledc.h"
 #include "soc/ledc_struct.h"
+#ifdef USE_WIFI
+#include "esphome/components/wifi/wifi_component.h"
+#endif
 
 namespace esphome::hatch_plus_power {
 static const char *const TAG = "hatch_plus_power";
@@ -63,7 +66,7 @@ void HatchPlusPower::configure_virtual(unsigned, unsigned, unsigned reg, unsigne
 }
 void HatchPlusPower::source_changed(unsigned label) {
   ESP_LOGD(TAG, "Power source %u", label);
-  if (display_) display_->show_text_overlay(label == 4 ? "base" : label == 1 ? "plug" : "batt", 3000);
+  if (display_ && !preparing_) display_->show_text_overlay(label == 4 ? "base" : label == 1 ? "plug" : "batt", 3000);
 }
 int HatchPlusPower::reset_greenpak() {
   int result = boot_->reset();
@@ -73,8 +76,9 @@ int HatchPlusPower::reset_greenpak() {
   return result;
 }
 void HatchPlusPower::display(bool reset) {
-  if (reset) display_->show_text("rSt");
-  else display_->show_text(std::to_string(runtime_->controller().task_state().battery.reported));
+  // Refresh while the hardware timer is active, above clock/source overlays.
+  // A released preview expires even when no shutdown request was latched.
+  display_->show_text_overlay(reset ? "rSt" : "OFF", 3000);
 }
 void HatchPlusPower::prepare() {
   if (!preparing_) {
@@ -87,9 +91,44 @@ void HatchPlusPower::prepare() {
   led_request(load_, 0, *this);
 }
 void HatchPlusPower::state_shutdown(unsigned reason) {
+  if (shutdown_reason_ != reason) {
+    if (reason == 4) ESP_LOGW(TAG, "Timed power-button shutdown requested");
+    else ESP_LOGW(TAG, "Local shutdown reason %u", reason);
+  }
   shutdown_reason_ = reason;
-  ESP_LOGW(TAG, "Local shutdown reason %u", reason);
-  display_->clear();
+  display_->show_text_overlay("", 0);
+}
+bool HatchPlusPower::prepare_power_off() {
+  // The indicator owner is suspended during preparation. Use the same bus and
+  // discovered address, preserving every bit outside the three indicator fields.
+  if (!bus_ || found_ == 2) return false;
+  GreenPakRegisterTransport<Bus> registers(*bus_, greenpak_address(found_));
+  bool ok = true;
+  for (uint16_t field : {0x192, 0x198, 0x1a4})
+    if (!registers.write_bits(field, 6, 0x11)) ok = false;
+  if (!ok && !indicator_blank_failed_)
+    ESP_LOGW(TAG, "Indicator blanking failed; continuing power-off for battery protection");
+  indicator_blank_failed_ = !ok;
+  return ok;
+}
+void HatchPlusPower::power_off_result(bool ok) {
+  if (!ok) {
+    if (!power_off_failed_) ESP_LOGW(TAG, "Final power-off transaction failed; keeping WiFi available for retry");
+    power_off_failed_ = true;
+    owner_fault_ = true;
+    return;
+  }
+  power_off_failed_ = false;
+  if (!power_off_committed_) {
+    power_off_committed_ = true;
+    ESP_LOGW(TAG, "GreenPAK power-off committed");
+#ifdef USE_WIFI
+    if (wifi::global_wifi_component != nullptr && !wifi::global_wifi_component->is_disabled()) {
+      wifi::global_wifi_component->disable();
+      wifi_disabled_for_power_off_ = true;
+    }
+#endif
+  }
 }
 void HatchPlusPower::drain_logs() { fflush(stdout); fflush(stderr); }
 void HatchPlusPower::external_critical() { ESP_LOGW(TAG, "Critical battery on external charger"); }
@@ -140,8 +179,21 @@ void HatchPlusPower::loop() {
     // The core can cancel even after an attempted off transaction. If power
     // remains, follow that decision instead of retaining an owner-only latch.
     if (!s.shutdown.request) {
+      if (preparing_) {
+        display_->clear_overlay();
+        // A successful off write normally removes power. If the hardware stays
+        // alive and the core cancels, restore networking rather than strand it.
+#ifdef USE_WIFI
+        if (wifi_disabled_for_power_off_ && wifi::global_wifi_component != nullptr)
+          wifi::global_wifi_component->enable();
+#endif
+      }
       preparing_ = false;
       shutdown_reason_ = 0;
+      power_off_failed_ = false;
+      power_off_committed_ = false;
+      wifi_disabled_for_power_off_ = false;
+      indicator_blank_failed_ = false;
     }
     const bool accepted = runtime_->last_result().report_accepted;
     // Acceptance is the stock reporting path, not proof of electrical validity.
@@ -154,6 +206,19 @@ void HatchPlusPower::loop() {
     // invalidate exposed hardware states; stock controller caches stay intact.
     publish_hardware_status_();
   }
+}
+
+bool HatchPlusPower::set_indicator(uint8_t index, uint8_t state) {
+  if (!indicators_ready() || index > 2 || state > 3) return false;
+  static constexpr uint16_t fields[] = {0x192, 0x198, 0x1a4};
+  static constexpr uint8_t codes[] = {0x11, 0x00, 0x17, 0x10};
+  GreenPakRegisterTransport<Bus> registers(*bus_, greenpak_address(found_));
+  return registers.write_bits(fields[index], 6, codes[state]);
+}
+
+float HatchPlusPower::indicator_battery_percent() const {
+  if (!indicators_ready() || !runtime_->has_report()) return NAN;
+  return runtime_->controller().task_state().battery.reported;
 }
 
 void HatchPlusPower::dump_config() {
@@ -169,6 +234,7 @@ void HatchPlusPower::update() {
 }
 
 void HatchPlusPower::publish_hardware_status_() {
+  hardware_status_valid_ = false;
   uint8_t data[3];
   // Diagnostics use the configured part only. Control uses the address already
   // discovered by the power owner; this read never probes, resets or writes.
@@ -193,6 +259,9 @@ void HatchPlusPower::publish_hardware_status_() {
   if (owner_fault_) this->status_set_warning();
   else this->status_clear_warning();
   const PowerStatus status{data[0], data[1], data[2]};
+  hardware_status_valid_ = true;
+  charging_enabled_with_power_ = status.charge_enable_logic() &&
+      (status.external_power_present() || status.wireless_voltage_present());
   ESP_LOGD(TAG, "GreenPAK RAM 74=%02X 75=%02X 76=%02X (read-only)", data[0], data[1], data[2]);
   if (this->status_74_ != nullptr)
     this->status_74_->publish_state(data[0]);

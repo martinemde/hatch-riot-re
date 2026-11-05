@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_runtime_owner_chain(tmp_path):
  actual=(ROOT/"esphome/components/hatch_plus_power/hatch_plus_power.cpp").read_text()
  methods=[]
- for name in ("prepare","state_shutdown","led_busy","loop","publish_hardware_status_","delay"):
+ for name in ("prepare","state_shutdown","led_busy","loop","publish_hardware_status_","delay","power_off_result"):
   signature=("bool" if name=="led_busy" else "void")+" HatchPlusPower::"+name+"("
   start=actual.index(signature);brace=actual.index("{",start);depth=1;end=brace+1
   while depth:

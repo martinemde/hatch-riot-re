@@ -7,6 +7,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#define USE_WIFI
+namespace wifi {struct WiFi {unsigned disables=0,enables=0;bool disabled=false;bool is_disabled(){return disabled;}void disable(){++disables;disabled=true;}void enable(){++enables;disabled=false;}};WiFi *global_wifi_component=nullptr;}
 using ledc_channel_t=unsigned;
 uint32_t mock_duty[2][8]{};
 using ledc_mode_t=unsigned;
@@ -23,7 +25,7 @@ using namespace esphome::hatch_plus_power;
 namespace media_player {enum{MEDIA_PLAYER_COMMAND_STOP=1,MEDIA_PLAYER_STATE_PLAYING=2,MEDIA_PLAYER_STATE_ANNOUNCING=3};}
 struct Light {bool on=true,transformer=false;int stops=0;struct Values{bool on=true;bool is_on(){return on;}}current_values;struct Call{Light *s;void perform(){s->stops++;s->current_values.on=false;}};Call turn_off(){return {this};}bool is_transformer_active(){return transformer;}};
 struct Player {int state=0,stops=0;struct Call{Player *s;Call &set_command(int){return *this;}void perform(){s->stops++;s->state=0;}};Call make_call(){return {this};}};
-struct Display {int clears=0;void clear(){clears++;}};
+struct Display {int clears=0;void clear(){clears++;}void show_text_overlay(const char*,unsigned){}void clear_overlay(){}};
 struct Speaker {bool running=false;unsigned finishes=0;bool is_running(){return running;}void finish(){finishes++;}};
 struct Sensor {float state=0;unsigned publications=0;bool valid=false;
  void publish_state(float v){state=v;valid=true;++publications;}void invalidate_state(){valid=false;}};
@@ -59,7 +61,8 @@ public:
  std::vector<uint8_t> pwm_channels_{0,1,2,3};
  bool desired_amp_=false,desired_led_=false,desired_initialized_=false,speaker_ready_=false;uint32_t speaker_ready_tick_=0;Speaker speaker_object;Speaker *speaker_=&speaker_object;
  LoadState load_;Light *light_;Player *player_;Display *display_;std::unique_ptr<Runtime>runtime_;
- bool owner_fault_=false;
+ bool indicator_blank_failed_=false;bool owner_fault_=false,power_off_failed_=false,power_off_committed_=false,wifi_disabled_for_power_off_=false;
+ bool hardware_status_valid_=false,charging_enabled_with_power_=false;
  bool preparing_=false,allow_control_=true,stopped_=false,amp_timer_active_=false,failed=false;
  uint32_t now=0,amp_timer_tick_=0,led_second_tick_=0,quiet_ticks_=0,quiet_start_=0;unsigned shutdown_reason_=0;uint16_t outputs=0x500;bool fail_write=false;
  Sensor *battery_report_age_=nullptr,*battery_report_accepted_=nullptr,*owner_fault_sensor_=nullptr;
@@ -83,6 +86,8 @@ public:
  void service(uint32_t index,uint32_t){assert(index!=3);++nonpower;}
  void delay(unsigned ticks);
  void prepare();void state_shutdown(unsigned);bool led_busy();void loop();
+ bool blank_ok=true;unsigned blank_attempts=0;
+ bool prepare_power_off(){++blank_attempts;return blank_ok;}void power_off_result(bool);
 };
 // OWNER_METHODS
 int main(){
@@ -142,13 +147,18 @@ int main(){
  owner.stopped_=true;visits=owner.visits;owner.now+=2000;owner.loop();assert(owner.visits==visits);
  // An off transaction is not proof that the processor lost power. Exercise both
  // failed writes and accepted writes with power retained, for both off reasons.
- for(unsigned request:{1u,2u})for(bool fail_off:{false,true}) {
+ for(unsigned request:{1u,2u})for(bool fail_off:{false,true})for(bool fail_blank:{false,true}) {
   Light l;Player p;Display d;HatchPlusPower o;Bus b;Adc a;
   o.light_=&l;o.player_=&p;o.display_=&d;o.load_.amp_initialized=1;
   o.now=100;o.runtime_=std::make_unique<Runtime>(b,0x10,a,o,o.tick());
+  wifi::WiFi network;wifi::global_wifi_component=&network;
+  o.blank_ok=!fail_blank;const unsigned expected_off=1;
+  const bool committed=!fail_off;
   b.fail_off=fail_off;o.runtime_->controller().task_state().shutdown.request=request;
   o.loop();o.now+=2000;o.loop();
-  assert(b.off_attempts==1&&o.preparing_&&o.shutdown_reason_==(request==1?4:5));
+  assert(o.blank_attempts==1);
+  assert(network.disables==(committed?1u:0u)&&network.enables==0);
+  assert(b.off_attempts==expected_off&&o.preparing_&&o.shutdown_reason_==(request==1?4:5));
   assert(o.runtime_->controller().task_state().shutdown.request==request);
   assert(l.stops==1&&p.stops==1&&!o.amplifier()&&!o.led_wait());
   // Dock/plug arrival must cancel in the real source/shutdown cores. Successful
@@ -156,12 +166,14 @@ int main(){
   b.source=0x40;o.now+=10000;o.loop();o.now+=2000;o.loop();
   assert(o.runtime_->controller().task_state().source.flags&1);
   assert(!o.runtime_->controller().task_state().shutdown.request);
-  assert(!o.preparing_&&!o.shutdown_reason_&&b.off_attempts==1);
+  assert(!o.preparing_&&!o.shutdown_reason_&&b.off_attempts==expected_off);
+  assert(network.enables==(committed?1u:0u)&&!network.disabled);
   // New independent UI/playback requests can enable both real load-controller
   // caches and the mocked physical outputs after speaker-clock settling.
   l.current_values.on=true;p.state=media_player::MEDIA_PLAYER_STATE_PLAYING;o.speaker_->running=true;
   o.now++;o.loop();assert(o.led_wait()&&!o.amplifier());
   o.now+=30;o.loop();assert(o.amplifier()&&o.led_wait()&&(o.outputs&0x500)==0x500);
   assert(l.stops==1&&p.stops==1&&o.speaker_->finishes==1);
+  wifi::global_wifi_component=nullptr;
  }
 }

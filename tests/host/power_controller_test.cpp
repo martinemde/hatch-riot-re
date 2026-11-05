@@ -87,6 +87,8 @@ struct TaskIO : ShutdownTransport {
 };
 
 struct RuntimeApplication : TaskIO {
+  bool prepare_power_off() { return true; }
+  void power_off_result(bool) {}
   unsigned service_calls = 0;
   void service(uint32_t index, uint32_t) { assert(index != 3); ++service_calls; }
   int runtime_variant = 2;

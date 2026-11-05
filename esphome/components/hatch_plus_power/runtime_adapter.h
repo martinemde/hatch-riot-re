@@ -100,7 +100,14 @@ class PowerRuntime : public ShutdownTransport {
   void prepare() override { app_.prepare(); }
   void state_shutdown(unsigned reason) override { app_.state_shutdown(reason); }
   void drain_logs() override { app_.drain_logs(); }
-  int set_virtual(unsigned mask) override { return greenpak_.set(mask) ? 0 : 1; }
+  int set_virtual(unsigned mask) override {
+    // Keep WiFi available throughout preparation and failed/retryable writes.
+    // Indicator cleanup must never block critical-battery protection.
+    app_.prepare_power_off();
+    const bool ok = greenpak_.set(mask);
+    app_.power_off_result(ok);
+    return ok ? 0 : 1;
+  }
   void delay(unsigned ticks) override { app_.delay(ticks); }
   void external_critical() override { app_.external_critical(); }
   int reset_greenpak() override { return app_.reset_greenpak(); }

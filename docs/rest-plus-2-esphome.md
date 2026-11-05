@@ -160,8 +160,19 @@ explicit permission and recovery planning.
 `hatch_accelerometer` exposes optional DA213 axes, tilt and orientation. Its
 `allow_initialization` defaults false (read-only discovery). The
 `hatch_plus_indicator_probe` component performs read-only register logging and
-creates no Home Assistant entities. Optional components are not enabled by the
-main example automatically.
+creates no Home Assistant entities. The main example enables `hatch_plus_indicator` for the three bottom status
+lights; it does not enable the accelerometer or read-only indicator probe. See
+[bottom indicator lights](rest-plus-indicators.md) for Automatic/manual behavior
+and limitations.
+
+The power-button shutdown path shows OFF above clock/source overlays and
+best-effort blanks bottom indicators before the final power-off transaction.
+Wi-Fi is disabled only after that transaction succeeds and is restored if a
+still-powered device cancels shutdown. Indicator cleanup cannot block battery
+protection. I2C success alone does not prove physical power removal.
+
+Builds and schema tests now require ESPHome 2026.10.0 (see
+`requirements-esphome.txt`); CI uses the same version.
 
 Host tests and compilation are not hardware-safety approval. Reboot/OTA/safe-mode,
 off/wake behavior, retained outputs after startup errors, actual charge current,

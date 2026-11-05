@@ -26,6 +26,11 @@ class HatchPlusPower : public PollingComponent {
   void setup() override;
   void loop() override;
   void set_allow_control(bool value) { allow_control_ = value; }
+  // Indicator calls share this owner's discovered device and main-loop transport.
+  bool indicators_ready() const { return allow_control_ && found_ == 0 && runtime_ && !stopped_ && !preparing_ && !is_failed(); }
+  bool set_indicator(uint8_t index, uint8_t state);
+  float indicator_battery_percent() const;
+  bool indicator_charging() const { return hardware_status_valid_ && charging_enabled_with_power_; }
   void set_allow_nvm_programming(bool value) { allow_nvm_programming_ = value; }
   void set_light(light::LightState *value) { light_ = value; }
   void set_speaker(speaker::Speaker *value) { speaker_ = value; }
@@ -49,6 +54,8 @@ class HatchPlusPower : public PollingComponent {
   void display(bool reset);
   void prepare();
   void state_shutdown(unsigned reason);
+  bool prepare_power_off();
+  void power_off_result(bool ok);
   void drain_logs();
   void external_critical();
   void service(uint32_t index, uint32_t delta);
@@ -108,6 +115,7 @@ class HatchPlusPower : public PollingComponent {
   unsigned found_{2}, shutdown_reason_{0};
   uint32_t amp_timer_tick_{0}, led_second_tick_{0}, quiet_start_{0}, quiet_ticks_{0}, speaker_ready_tick_{0};
   bool speaker_ready_{false};
+  bool power_off_failed_{false}, power_off_committed_{false}, wifi_disabled_for_power_off_{false}, indicator_blank_failed_{false};
   bool allow_nvm_programming_{false}, owner_fault_{false};
   bool allow_control_{false}, app_locked_{false}, amp_locked_{false}, led_locked_{false};
   bool amp_timer_active_{false}, init_failed_{false}, preparing_{false};
@@ -124,6 +132,7 @@ class HatchPlusPower : public PollingComponent {
   binary_sensor::BinarySensor *external_power_{nullptr};
   binary_sensor::BinarySensor *wireless_voltage_{nullptr};
   binary_sensor::BinarySensor *charge_enable_{nullptr};
+  bool hardware_status_valid_{false}, charging_enabled_with_power_{false};
   bool stopped_{false};
 };
 }  // namespace esphome::hatch_plus_power
