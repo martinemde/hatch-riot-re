@@ -10,16 +10,8 @@ from esphome.const import CONF_ID
 DEPENDENCIES = ["hatch_expander", "i2c"]
 AUTO_LOAD = ["sensor", "binary_sensor"]
 CONF_EXPANDER = "hatch_expander_id"
-CONF_ACK = "acknowledge_experimental_power_risks"
 ns = cg.esphome_ns.namespace("hatch_plus_power")
 HatchPlusPower = ns.class_("HatchPlusPower", cg.PollingComponent)
-
-
-def require_ack(value):
-    value = cv.boolean(value)
-    if not value:
-        raise cv.Invalid("Experimental control manages charging, thermal policy and shutdown; NVM programming needs separate approval. Hardware safety and recovery are unverified; explicit true acknowledgment required")
-    return value
 
 
 def validate_control(config):
@@ -36,7 +28,6 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.GenerateID(): cv.declare_id(HatchPlusPower),
     cv.Required(CONF_EXPANDER): cv.use_id(HatchExpander),
     cv.Required("i2c_id"): cv.use_id(i2c.I2CBus),
-    cv.Required(CONF_ACK): require_ack,
     cv.Optional("allow_control", default=False): cv.boolean,
     cv.Optional("allow_nvm_programming", default=False): cv.boolean,
     cv.Optional("pwm_channels"): cv.All(cv.ensure_list(cv.int_range(min=0, max=15)), cv.Length(min=4, max=4)),

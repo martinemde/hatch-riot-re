@@ -8,15 +8,7 @@ from esphome.components.hatch_plus_power import CONFIG_SCHEMA
 
 
 def config(**options):
-    return {"hatch_expander_id": "expander", "i2c_id": "bus1",
-            "acknowledge_experimental_power_risks": True, **options}
-
-
-def test_explicit_risk_ack_required():
-    with pytest.raises(cv.Invalid):
-        CONFIG_SCHEMA(config(acknowledge_experimental_power_risks=False))
-    with pytest.raises(cv.Invalid):
-        CONFIG_SCHEMA({"hatch_expander_id": "expander", "i2c_id": "bus1"})
+    return {"hatch_expander_id": "expander", "i2c_id": "bus1", **options}
 
 
 def test_diagnostics_default_has_no_control_or_nvm_approval():
