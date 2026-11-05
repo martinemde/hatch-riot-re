@@ -183,6 +183,22 @@ output:
   frequency: 19500Hz
   max_power: 25%
 light:
+- platform: hatch_plus_indicator
+  id: wifi_indicator
+  name: Wi-Fi Indicator
+  indicator: wifi
+  hatch_plus_power_id: plus_power_diagnostics
+- platform: hatch_plus_indicator
+  id: battery_indicator
+  name: Battery Indicator
+  indicator: battery
+  hatch_plus_power_id: plus_power_diagnostics
+- platform: hatch_plus_indicator
+  id: lock_indicator
+  name: Toddler Lock Indicator
+  indicator: lock
+  hatch_plus_power_id: plus_power_diagnostics
+  hatch_plus_id: hatch_controller
 - platform: monochromatic
   id: clock_light
   name: Clock Display
@@ -313,6 +329,7 @@ switch:
 - platform: template
   id: sd_cache_enabled
   name: SD Card Cache
+  entity_category: config
   icon: mdi:sd
   optimistic: true
   restore_mode: RESTORE_DEFAULT_OFF
@@ -334,6 +351,7 @@ switch:
   id: toddler_lock
   icon: mdi:lock
   name: Toddler Lock
+  entity_category: config
   optimistic: true
   restore_mode: RESTORE_DEFAULT_OFF
   on_turn_on:
@@ -527,6 +545,7 @@ external_components:
   - speaker_source
   - hatch_plus
   - hatch_plus_power
+  - hatch_plus_indicator
 # Shared Plus peripheral owner (stock physical port1). Not a deployment claim.
 i2c:
   id: plus_bus1
