@@ -23,7 +23,7 @@ external_components:
       url: https://github.com/w1ll1am23/hatch-riot-re
       ref: v1.5
       path: esphome/components
-    components: [hatch_expander, hatch_display, hatch_status_led, sd_cache, speaker_source]
+    components: [hatch_expander, hatch_accelerometer, hatch_display, hatch_status_led, sd_cache, speaker_source]
     refresh: 1d
 
 packages:

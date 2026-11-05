@@ -94,7 +94,7 @@ time:
 
 # ---------------------------------------------------------------- Expander
 # The expander gets the I2C pins to itself (bit-banged, see components/hatch_expander): no `i2c:` bus here. The
-# accelerometer (0x27) on the same bus is unused by this config.
+# accelerometer (0x27) shares that bus through the expander's shared-bus transactions.
 hatch_expander:
   - id: io_exp
     sda: GPIO0
@@ -102,6 +102,15 @@ hatch_expander:
     address: 0x58
     frequency: 50kHz
     interrupt_pin: GPIO34
+
+# DA213 accelerometer (0x27) on the expander's bus. Read-only discovery (no initialization): the stock
+# firmware already configured the part, we only sample it.
+hatch_accelerometer:
+  hatch_expander_id: io_exp
+  tilt_angle:
+    name: "Tilt Angle"
+  upright:
+    name: "Upright"
 
 # ---------------------------------------------------------------- Night light (LEDC, high-speed group)
 power_supply:
