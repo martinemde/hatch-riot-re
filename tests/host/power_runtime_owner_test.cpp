@@ -38,7 +38,10 @@ struct Sensor {float state=0;unsigned publications=0;bool valid=false;
 struct Expander {bool ok=true;unsigned reads=0;uint8_t address=0,values[3]{0x60,0x12,0x04};
  bool read(uint8_t a,uint8_t reg,uint8_t *data,size_t n){
   ++reads;address=a;assert(reg==0x74&&n==3);if(!ok)return false;
-  for(size_t i=0;i<n;i++)data[i]=values[i];return true;
+  for (size_t i = 0; i < n; i++) {
+   data[i] = values[i];
+  }
+  return true;
  }};
 struct Controller {struct State {struct Shutdown{unsigned request=1;}shutdown;struct Battery{int reported=50;}battery;struct Status{int published=0;}status;struct Source{int external_charger=0;}source;}s;const State &task_state(){return s;}};
 struct Runtime {struct Result{bool report_accepted=true;}last;bool has_report(){return true;}uint32_t report_age_ms(){return 1234;}const Result &last_result(){return last;}Controller c;bool result=false;bool poll(){return result;}Controller &controller(){return c;}int read(uint16_t){return 0;}};

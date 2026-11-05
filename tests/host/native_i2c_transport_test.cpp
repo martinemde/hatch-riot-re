@@ -7,7 +7,12 @@ struct Owner {
  unsigned calls=0;int result=0;uint8_t address=0;size_t reads=0;std::vector<uint8_t> payload;
  int write_readv(uint8_t a,const uint8_t *w,size_t wn,uint8_t *r,size_t rn){
   ++calls;address=a;reads=rn;payload.clear();if(wn)payload.assign(w,w+wn);
-  if(!result)for(size_t i=0;i<rn;i++)r[i]=uint8_t(0x74+i);return result;
+  if (!result) {
+   for (size_t i = 0; i < rn; i++) {
+    r[i] = uint8_t(0x74 + i);
+   }
+  }
+  return result;
  }
 };
 int main(){
