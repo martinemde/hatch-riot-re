@@ -51,6 +51,13 @@ api:
     - script.execute: update_status_leds
   on_client_disconnected:
     - script.execute: update_status_leds
+  actions:
+    # Scroll a message across the clock once (e.g. from a HA automation), then restore what was shown.
+    - action: send_text
+      variables:
+        message: string
+      then:
+        - lambda: id(clock_display).show_scrolling_text_once(message);
 
 ota:
   - platform: esphome
@@ -424,14 +431,15 @@ number:
       - lambda: id(clock_display).set_brightness(15 - (uint8_t) x);
 
 text:
-  # Shown while "Show Clock" is off: up to 4 characters, right-aligned; a '.' lights the previous digit's decimal
-  # point (e.g. "12.5", "HI", "-3.2.1"). Letters use the stock 7-segment font, so some read better than others.
+  # Shown while "Show Clock" is off. Text longer than four glyphs scrolls (500 ms steps, first and last frames
+  # held for 2 s). A '.' lights the previous digit's decimal point (e.g. "12.5", "HI", "-3.2.1"). Letters use the
+  # stock 7-segment font, so some read better than others.
   - platform: template
     id: display_text
     name: Display Text
     icon: mdi:form-textbox
     mode: text
-    max_length: 8
+    max_length: 128
     optimistic: true
     restore_value: true
     on_value:
@@ -458,7 +466,7 @@ script:
     then:
       - lambda: |-
           if (!id(show_clock).state) {
-            id(clock_display).show_text(id(display_text).state);
+            id(clock_display).show_scrolling_text(id(display_text).state);
             return;
           }
           auto t = id(ha_time).now();

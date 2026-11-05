@@ -1,0 +1,39 @@
+name: Host tests
+on:
+  workflow_dispatch:
+  push:
+    paths: ['esphome/components/**', 'tests/**', '.github/workflows/tests.yml']
+  pull_request:
+    paths: ['esphome/components/**', 'tests/**', '.github/workflows/tests.yml']
+permissions:
+  contents: read
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    name: Host tests (ESPHome ${{ matrix.esphome }})
+    # The pinned version is the gate; latest is an early-warning run that may fail on upstream changes.
+    continue-on-error: ${{ matrix.esphome == 'latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        esphome: ['2026.10.0', latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ESPHome and pytest
+        run: |
+          if [ "${{ matrix.esphome }}" = "latest" ]; then
+            pip install esphome pytest
+          else
+            pip install "esphome==${{ matrix.esphome }}" pytest
+          fi
+      # The speaker pipeline test compiles against the installed ESPHome headers and the micro-wav
+      # decoder; it looks for the decoder where an ESPHome build would have fetched it.
+      - name: Fetch the micro-wav decoder
+        run: |
+          mkdir -p esphome/.esphome/build/ci/managed_components
+          git clone --depth 1 https://github.com/esphome-libs/micro-wav \
+            esphome/.esphome/build/ci/managed_components/esphome__micro-wav
+      - run: python -m pytest tests/ -q
