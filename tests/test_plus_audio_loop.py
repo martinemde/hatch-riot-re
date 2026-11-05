@@ -12,8 +12,10 @@ def pipeline_exe(tmp_path_factory):
     # Use the project's installed MediaSource contract; platform interfaces alone are mocked.
     import esphome
     installed = Path(esphome.__file__).parent.parent
-    wav = ROOT / "esphome/.esphome/build/hatch-plus-example/managed_components/esphome__micro-wav"
-    assert (wav / "src/wav_decoder.cpp").is_file(), "build ESPHome hatch-plus-example config first to fetch micro_wav"
+    builds = ROOT / "esphome/.esphome/build"
+    wav = next((path for path in sorted(builds.glob("*/managed_components/esphome__micro-wav"))
+                if (path / "src/wav_decoder.cpp").is_file()), None)
+    assert wav is not None, "fetch micro-wav into an ESPHome build's managed_components (see Host tests CI)"
     compiler = shutil.which("c++")
     assert compiler, "host C++ compiler required"
     exe = tmp_path_factory.mktemp("speaker-pipeline") / "pipeline_test"
