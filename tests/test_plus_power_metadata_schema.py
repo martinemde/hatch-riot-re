@@ -8,6 +8,14 @@ esphome.components.__path__.append(str(Path(__file__).resolve().parents[1] / "es
 from esphome.components.hatch_plus_power import CONFIG_SCHEMA as POWER_SCHEMA
 from esphome.components.hatch_plus_indicator_probe import CONFIG_SCHEMA as PROBE_SCHEMA
 from esphome.components.sensor import STATE_CLASSES
+from esphome.core import CORE
+
+
+@pytest.fixture(autouse=True)
+def reset_esphome_core():
+    CORE.reset()
+    yield
+    CORE.reset()
 
 POWER_METADATA = {
     "battery_percent": ("mdi:battery", "battery", "%", "measurement"),

@@ -92,6 +92,16 @@ These parts needed custom code (local components in [`esphome/components/`](esph
 - [docs/methodology.md](docs/methodology.md): how the analysis was done, and how to reproduce it with `tools/`.
 - [docs/probe-firmware.md](docs/probe-firmware.md): **safety model and test plan for the ESPHome probe firmware**.
 
+## Local Rest+ BLE flasher
+
+[`flasher/`](flasher/README.md) is an independent experimental local tool for
+stock Wi-Fi setup and application-only first installs on **Rest+ 2nd gen
+(HBRESTPLUS2)**. Tested stock routes are 7.1.645 (WSUP) and 7.1.503 (state.rF).
+It includes a localhost dashboard, Python server and offline tests; it does not
+include a Rest+ firmware configuration or change the Rest firmware's support.
+**Do not flash the Rest YAML onto Rest+.** Other models, including Rest, are not
+verified with this flasher. Read its safety and recovery limits before use.
+
 ## ESPHome firmware
 
 - [`esphome/hatch-rest.yaml`](esphome/hatch-rest.yaml): **the stock replacement** (builds with ESPHome 2026.10.0),

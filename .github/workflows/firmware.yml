@@ -44,6 +44,7 @@ jobs:
         run: |
           esphome compile esphome/hatch-rest.yaml
           esphome compile esphome/hatch-plus-example.yaml
+          esphome compile esphome/hatch-plus-power-compile.yaml
       # Deliberately do not publish these binaries: they contain CI-only credentials.
       - name: Remove temporary credentials
         if: always()

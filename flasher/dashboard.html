@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Hatch · Local Wi-Fi &amp; Firmware</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f3f3fa;background:#101e35;font-synthesis:none;--muted:#b2bfd2;--line:#354963;--accent:#d9cef5}
+*{box-sizing:border-box}body{margin:0}main{max-width:1060px;margin:auto;padding:44px 24px 32px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:30px}.eyebrow{font-size:11px;letter-spacing:.17em;font-weight:700;text-transform:uppercase;color:var(--accent)}h1{font-size:36px;letter-spacing:-.045em;margin:8px 0 10px;font-weight:600}h2{font-size:18px;letter-spacing:-.02em;margin:0}p{line-height:1.6;margin:8px 0;color:var(--muted);font-size:14px}.badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;font-size:12px;white-space:nowrap}.dot{width:7px;height:7px;border-radius:50%;background:#8495ae}.badge[data-online="true"] .dot{background:var(--accent)}.notice{border:1px solid #536284;background:#22314e;padding:15px 18px;border-radius:12px;margin-bottom:22px;font-size:13px;line-height:1.65;color:#dedff1}.notice strong{color:#f4eeff}.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}.card{border:1px solid var(--line);border-radius:16px;padding:24px;background:#192b45}.card-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}.step{font:12px ui-monospace,monospace;color:var(--accent);margin-bottom:9px}.devices{display:flex;flex-direction:column;gap:10px;margin:18px 0}.device{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:14px;cursor:pointer}.device:has(input:checked){border-color:var(--accent);background:#2c3b5c}.device input{margin:4px 0 0;accent-color:var(--accent)}.device-body{min-width:0;flex:1}.device-name{display:block;font-weight:600;font-size:14px;overflow-wrap:anywhere}.device-meta{display:block;font:12px ui-monospace,monospace;color:var(--muted);margin-top:7px;overflow-wrap:anywhere}.service{display:block;font-size:12px;margin-top:8px;color:var(--muted)}.service.verified{color:var(--accent)}button{font:600 13px inherit;font-family:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:#293e5b;color:#f3f3fa;border-radius:9px;padding:11px 15px;transition:background .15s}button:hover:not(:disabled){background:#3a5070}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button:disabled{opacity:.4;cursor:not-allowed}.primary{background:var(--accent);border-color:var(--accent);color:#192b45}.primary:hover:not(:disabled){background:#ebe2ff}.action{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 0}.action+.action{border-top:1px solid var(--line)}.action strong{font-size:14px}.image-info{font:11px/1.6 ui-monospace,monospace;color:var(--muted);overflow-wrap:anywhere;margin-top:6px}.small{font-size:12px}.empty{padding:24px 14px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:13px;line-height:1.6}.wide{margin-top:20px}.progress-header{display:flex;justify-content:space-between;align-items:center;gap:15px}.operation{font-size:14px;margin-top:13px;color:#e1e7f2;overflow-wrap:anywhere}progress{display:block;width:100%;height:9px;margin:16px 0 10px;border:0;border-radius:8px;overflow:hidden;background:#314562;accent-color:var(--accent)}progress::-webkit-progress-bar{background:#314562}progress::-webkit-progress-value{background:var(--accent)}progress::-moz-progress-bar{background:var(--accent)}.error{background:#392c40;color:#ffdae1;border:1px solid #805a73;padding:12px 15px;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:18px}.events{list-style:none;margin:16px 0 0;padding:0;max-height:260px;overflow:auto}.events li{display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--line);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.events time{color:var(--muted);font-family:ui-monospace,monospace;flex:0 0 100px}.events span{min-width:0}footer{font-size:11px;line-height:1.6;color:var(--muted);margin-top:22px}#selection{min-height:20px;overflow-wrap:anywhere}[hidden]{display:none!important}@media(max-width:760px){main{padding:28px 16px}.grid{grid-template-columns:1fr}h1{font-size:30px}.card{padding:20px}header{gap:10px}.badge{padding:7px 9px}.action{align-items:flex-start;flex-direction:column}.action button{width:100%}.events time{flex-basis:78px}}
+.field{display:block;margin:15px 0;font-size:13px}.field input,.field select{display:block;width:100%;margin-top:7px;padding:11px;border:1px solid var(--line);border-radius:8px;background:#101e35;color:#f3f3fa;font:inherit}.check{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.6;margin:16px 0}.check input{margin-top:5px;accent-color:var(--accent)}.wifi-results{font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main>
+<header><div><div class="eyebrow">Hatch / local tools</div><h1>Wi-Fi setup &amp; firmware</h1><p>Select a device. Provision Wi-Fi or choose firmware. Nothing runs automatically.</p></div><div class="badge" id="connection"><span class="dot"></span><span id="connection-text">Connecting</span></div></header>
+<div class="notice"><strong>Before you begin</strong> · Hold the reset-arrows button for about 3 seconds until the screen says “on”, then scan. That display confirms BLE setup is ready. A stock BLE/control service match proves neither device identity nor WSUP command support. Physically identify the intended unit before selecting it.</div>
+<div class="grid">
+<section class="card" aria-labelledby="devices-title"><div class="step">01 / FIND YOUR DEVICE</div><div class="card-head"><h2 id="devices-title">Nearby devices</h2><button id="scan" disabled>Scan · 15 seconds</button></div><p>Select the exact device you want to change.</p><div id="devices" class="devices" role="radiogroup" aria-label="Target device"><div class="empty">Connect to the local server to load devices.</div></div><p class="small" id="selection">No device selected.</p></section>
+<section class="card" aria-labelledby="wifi-title"><div class="step">02 / PROVISION WI-FI · OPTIONAL</div><h2 id="wifi-title">Stock Wi-Fi setup</h2><p>Both actions use the selected BLE target. Wi-Fi scan never sends credentials. Credential setup never sends firmware.</p><button id="wifi-scan" disabled>Scan Wi-Fi networks</button><form id="wifi-form" autocomplete="off"><label class="field">Scanned network<select id="wifi-networks" disabled><option value="">Scan networks first, or enter an SSID below</option></select></label><label class="field">SSID<input id="wifi-ssid" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required></label><label class="field">Wi-Fi password<input id="wifi-password" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required></label><p class="small">Password is sent only to the local server for this request. It is not saved or logged and is cleared from this field after submission. Do not save it in your browser.</p><button id="wifi-configure" type="submit" disabled>Configure Wi-Fi…</button></form><div class="wifi-results" aria-live="polite"><p id="wifi-accepted">Credentials: not submitted for this target.</p><p id="wifi-status">Device Wi-Fi report: none.</p><p>Command acceptance is not proof of association, DHCP, or a reachable LAN. Verify the selected unit’s network connection independently.</p></div></section>
+</div>
+<section class="card wide" aria-labelledby="firmware-title"><div class="step">03 / OPTIONAL · CHOOSE FIRMWARE</div><h2 id="firmware-title">Send an image</h2><p>Provisioning-only mode needs no image. Firmware is never sent automatically after Wi-Fi setup.</p><div class="action"><div><strong>Device version &amp; protocol</strong><p class="small">Probe the selected target before flashing. Stock 503 uses legacy BLE state.rF (complete install verified on hardware 8.0.1); stock 645 supports WSUP. This read-only check does not write settings or firmware. Unknown firmware requires an explicit protocol choice. Manual selection also overrides a known device’s detected protocol.</p><p id="device-info" class="image-info" role="status">Select a device, then probe its version and protocol.</p></div><button id="probe" disabled>Probe device</button></div><label class="field">Update protocol<select id="update-protocol"><option value="auto">Auto (use probed protocol)</option><option value="wsup">WSUP</option><option value="state_rf">Legacy BLE state.rF</option></select></label><div class="notice"><strong>Firmware download host: <span id="download-host">Waiting for server address…</span></strong><p>The selected Hatch must reach this exact LAN host and port. After this Mac changes networks or IP address, stop and restart the server with its current LAN IPv4 address. Different subnets need routing and firewall access; being on the same Wi-Fi is not proof of reachability.</p></div><label class="field">Target IPv4 (operator supplied; optional)<input id="target-ip" type="text" inputmode="decimal" placeholder="Unknown until checked in the router" autocomplete="off" spellcheck="false"></label><label class="field">Comparison prefix length (configurable assumption, not a discovered netmask)<input id="target-prefix" type="number" min="0" max="32" step="1" value="24"></label><p id="subnet-status" role="status">Target subnet: unknown.</p><label class="check" id="subnet-ack-label" hidden><input id="subnet-ack" type="checkbox"><span>I acknowledge the different-subnet warning and independently checked routing/firewall access. Proceed anyway.</span></label><p class="small">This comparison is advisory, not a connectivity test. Update these fields live without restarting the server. Changing the server’s advertised address still requires a server restart.</p><label class="check"><input id="network-verified" type="checkbox"><span>I independently verified that the selected unit is on Wi-Fi and can reach this computer’s LAN HTTP address. This is my confirmation, not a server measurement.</span></label><div class="action"><div><strong>Install ESPHome</strong><div class="image-info" id="esphome-info">Checking image…</div><label class="field">ESPHome app binary<input id="esphome-file" type="file" accept=".bin,application/octet-stream" disabled></label><button id="load-esphome" type="button" disabled>Load ESPHome image</button><p id="image-selection" role="status">No pending file selection.</p><p id="image-server-warning" class="error" hidden>Firmware actions blocked: this running server lacks the current image upload/hash safeguards. Stop and restart the updated server, then reload this page.</p><p class="small">Load an app binary (not a merged/factory image), up to 8 MiB, into the local server without restarting it. Loading does not install firmware or provision Wi-Fi. Review the new hash, then use Install ESPHome separately.</p></div><button class="primary" id="flash" disabled>Install ESPHome</button></div><div class="action"><div><strong>Restore stock</strong><div class="image-info" id="stock-info">Checking image…</div></div><button id="restore" disabled>Restore stock</button></div><p class="small">Stock restore here works only while the device is running supported stock firmware, using the chosen protocol: legacy BLE state.rF or WSUP. After installing ESPHome, use ESPHome OTA—not this restore action.</p></section>
+<div id="error" class="error" role="alert" hidden></div>
+<section class="card wide" aria-labelledby="transfer-title"><div class="progress-header"><h2 id="transfer-title">Transfer activity</h2><span class="badge" id="activity">Idle</span></div><div class="operation" id="operation" role="status">No operation running.</div><progress id="progress" value="0" max="1" aria-label="HTTP server bytes offered"></progress><p class="small" id="bytes">0 bytes offered by the HTTP server</p><p class="small">This measures HTTP server bytes offered—not flash percentage. A completed transfer does not prove a successful flash or boot.</p></section>
+<section class="card wide" aria-labelledby="events-title"><h2 id="events-title">Event log</h2><ul id="events" class="events"><li>No events yet.</li></ul></section>
+<footer>Local utility · Use http://127.0.0.1:8000 on this computer. Each scan, credential change, and firmware transfer needs an explicit action.</footer>
+</main>
+<script>
+'use strict';
+const byId = id => document.getElementById(id);
+let status = null;
+let selected = '';
+let pending = false;
+let online = false;
+let requestError = '';
+let subnetContext = '';
+let differentSubnet = false;
+let imageLoadUnconfirmed = false;
+const numberFormat = new Intl.NumberFormat();
+const bytesText = n => numberFormat.format(n) + ' bytes';
+function safeCount(value) { return Number.isFinite(value) && value >= 0 ? value : 0; }
+function selectedDeviceInfo() {
+  return selected && status?.device_info?.address === selected ? status.device_info : null;
+}
+function chosenProtocol() {
+  const override = byId('update-protocol').value;
+  if (['wsup', 'state_rf'].includes(override)) return override;
+  const info = selectedDeviceInfo();
+  return info?.supported === true && ['wsup', 'state_rf'].includes(info.protocol) ? info.protocol : null;
+}
+function canFlashSelected() {
+  return Boolean(selectedDeviceInfo() && chosenProtocol());
+}
+function protocolLabel(protocol) {
+  return {state_rf: 'legacy BLE state.rF', wsup: 'WSUP'}[protocol] || 'unsupported';
+}
+function renderDeviceInfo() {
+  const info = selectedDeviceInfo();
+  byId('device-info').textContent = info
+    ? 'Address: ' + info.address + ' · Model: ' + (info.model || 'unknown') + ' · Firmware: ' + (info.firmware || 'unknown') + ' · Hardware: ' + (info.hardware || 'unknown') + ' · Protocol: ' + protocolLabel(info.protocol) + ' · ' + (canFlashSelected() ? 'Chosen update protocol: ' + protocolLabel(chosenProtocol()) + (byId('update-protocol').value === 'auto' ? ' (auto).' : ' (manual override).') : 'Unknown or unsupported protocol — choose WSUP or legacy BLE state.rF explicitly to enable flashing.')
+    : selected ? 'Not probed for this target. Probe the device to enable supported firmware actions.' : 'Select a device, then probe its version and protocol.';
+}
+function imageSafetySupported() {
+  return status?.firmware_image_safety === 1;
+}
+function esphomeSelectionReady() {
+  return !imageLoadUnconfirmed && !byId('esphome-file').files.length;
+}
+function loadedImageText(info) {
+  return info ? 'SERVER-LOADED IMAGE: ' + (info.filename || '(filename unavailable)') + ' · ' + bytesText(safeCount(info.bytes)) + ' · SHA-256: ' + (info.sha256 || 'unavailable') : 'No image loaded — action unavailable';
+}
+function updateControls() {
+  renderSubnet();
+  const device = status?.devices?.find(d => d.address === selected);
+  const busy = pending || !online || Boolean(status?.busy);
+  byId('image-server-warning').hidden = imageSafetySupported();
+  const file = byId('esphome-file').files[0];
+  byId('image-selection').textContent = file
+    ? 'NOT LOADED: ' + file.name + '. Click Load ESPHome image. Install is blocked until loading succeeds.'
+    : imageLoadUnconfirmed ? 'Image load not confirmed. Choose a file and load it successfully before installing.' : 'No pending file selection. Install uses only the server-loaded image shown above.';
+  byId('esphome-file').disabled = busy || !imageSafetySupported();
+  byId('load-esphome').disabled = busy || !imageSafetySupported() || !byId('esphome-file').files.length;
+  byId('scan').disabled = busy;
+  byId('probe').disabled = busy || !device;
+  byId('update-protocol').disabled = busy || !device;
+  renderDeviceInfo();
+  byId('flash').disabled = busy || !imageSafetySupported() || !esphomeSelectionReady() || !device?.wsup_service || !canFlashSelected() || !status?.images?.esphome || !byId('network-verified').checked;
+  byId('restore').disabled = busy || !imageSafetySupported() || !device?.wsup_service || !canFlashSelected() || !status?.images?.stock || !byId('network-verified').checked;
+  byId('wifi-scan').disabled = busy || !device?.wsup_service;
+  byId('wifi-configure').disabled = busy || !device?.wsup_service;
+  for (const id of ['wifi-ssid', 'wifi-password', 'network-verified', 'target-ip', 'target-prefix', 'subnet-ack']) byId(id).disabled = busy || !device?.wsup_service;
+  renderWifi();
+  byId('selection').textContent = device ? 'Selected: ' + (device.name || 'Unnamed device') + ' · ' + device.address : 'No device selected.';
+  const error = requestError || status?.error;
+  byId('error').hidden = !error;
+  byId('error').textContent = error || '';
+}
+function render() {
+  const devices = Array.isArray(status.devices) ? status.devices : [];
+  if (!devices.some(d => d.address === selected)) { selected = ''; clearTargetInputs(); }
+  const list = byId('devices');
+  // Preserve keyboard focus across status refreshes.
+  const focusedAddress = list.contains(document.activeElement) ? document.activeElement.value : null;
+  list.replaceChildren();
+  if (!devices.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No devices found yet. Enter setup mode, then start a scan.';
+    list.append(empty);
+  }
+  for (const device of devices) {
+    const label = document.createElement('label'); label.className = 'device';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'device'; radio.value = device.address;
+    radio.checked = selected === device.address;
+    radio.disabled = Boolean(status.busy) || pending;
+    radio.addEventListener('change', () => { selected = device.address; clearTargetInputs(); updateControls(); });
+    const body = document.createElement('span'); body.className = 'device-body';
+    const name = document.createElement('span'); name.className = 'device-name'; name.textContent = device.name || 'Unnamed device';
+    const meta = document.createElement('span'); meta.className = 'device-meta';
+    meta.textContent = device.address + (device.rssi != null ? ' · ' + device.rssi + ' dBm' : '');
+    const service = document.createElement('span');
+    service.className = 'service' + (device.wsup_service ? ' verified' : '');
+    service.textContent = device.wsup_service ? 'Stock BLE/control service: yes (protocol requires probe)' : 'Stock BLE/control service: no';
+    body.append(name, meta, service); label.append(radio, body); list.append(label);
+    if (focusedAddress === device.address) radio.focus({preventScroll:true});
+  }
+  for (const image of ['esphome', 'stock']) {
+    const info = status.images?.[image];
+    byId(image + '-info').textContent = loadedImageText(info);
+  }
+  byId('download-host').textContent = typeof status.advertise === 'string' && Number.isInteger(status.port)
+    ? status.advertise + ':' + status.port
+    : 'Unavailable — restart the updated server before flashing';
+  const sent = safeCount(status.transfer?.sent);
+  const total = safeCount(status.transfer?.total);
+  byId('progress').max = total || 1;
+  byId('progress').value = Math.min(sent, total || 0);
+  byId('bytes').textContent = bytesText(sent) + (total ? ' / ' + bytesText(total) : '') + ' offered by the HTTP server';
+  byId('activity').textContent = status.busy ? 'Working' : 'Idle';
+  byId('operation').textContent = status.operation || (status.busy ? 'Operation in progress…' : 'No operation running.');
+  const events = byId('events'); events.replaceChildren();
+  for (const event of (Array.isArray(status.events) ? status.events : [])) {
+    const row = document.createElement('li');
+    const time = document.createElement('time'); time.textContent = event.time == null ? '' : String(event.time);
+    const message = document.createElement('span'); message.textContent = event.message || '';
+    row.append(time, message); events.append(row);
+  }
+  if (!events.childElementCount) { const row = document.createElement('li'); row.textContent = 'No events yet.'; events.append(row); }
+  updateControls();
+}
+async function refresh() {
+  try {
+    const response = await fetch('/api/status', {cache:'no-store'});
+    if (!response.ok) throw new Error('Status request failed (HTTP ' + response.status + ').');
+    status = await response.json(); online = true;
+    byId('connection-text').textContent = 'Connected';
+    byId('connection').dataset.online = 'true';
+    render();
+  } catch (error) {
+    online = false;
+    byId('connection-text').textContent = 'Disconnected';
+    byId('connection').dataset.online = 'false';
+    updateControls();
+  }
+}
+async function post(path, payload) {
+  if (pending || !online || status?.busy) return;
+  pending = true; requestError = ''; updateControls();
+  try {
+    const response = await fetch(path, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if (!response.ok) {
+      const detail = path === '/api/wifi_configure' ? '' : await response.text();
+      throw new Error('Request failed (HTTP ' + response.status + ')' + (detail ? ': ' + detail : '.'));
+    }
+    await refresh();
+  } catch (error) { requestError = path === '/api/wifi_configure' ? 'Wi-Fi configuration request failed. Password cleared; check device status before retrying.' : error.message || 'Request failed.'; }
+  finally { pending = false; updateControls(); }
+}
+async function loadEsphomeImage() {
+  const file = byId('esphome-file').files[0];
+  if (!file || pending || !online || status?.busy || !imageSafetySupported()) return;
+  imageLoadUnconfirmed = true;
+  pending = true; requestError = ''; updateControls();
+  try {
+    if (!file.size || file.size > 8 * 1024 * 1024) throw new Error('Choose a non-empty ESPHome app binary no larger than 8 MiB.');
+    const body = await file.arrayBuffer();
+    const response = await fetch('/api/image/esphome', {method:'POST', headers:{'Content-Type':'application/octet-stream', 'X-Image-Filename':encodeURIComponent(file.name)}, body});
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error('Image load failed (HTTP ' + response.status + ')' + (detail ? ': ' + detail : '.'));
+    }
+    const loadedStatus = await response.json();
+    if (loadedStatus.firmware_image_safety !== 1 || !loadedStatus.images?.esphome?.sha256 || loadedStatus.images.esphome.filename !== file.name || loadedStatus.images.esphome.bytes !== file.size) throw new Error('Server did not confirm the selected image. Restart the updated server and load it again.');
+    status = loadedStatus;
+    byId('esphome-file').value = '';
+    imageLoadUnconfirmed = false;
+    render();
+  } catch (error) { requestError = error.message || 'Image load failed.'; }
+  finally { pending = false; updateControls(); }
+}
+byId('esphome-file').addEventListener('change', () => { imageLoadUnconfirmed = true; updateControls(); });
+byId('load-esphome').addEventListener('click', loadEsphomeImage);
+function clearTargetInputs() {
+  byId('update-protocol').value = 'auto';
+  byId('wifi-password').value = '';
+  byId('wifi-ssid').value = '';
+  byId('network-verified').checked = false;
+  byId('target-ip').value = '';
+  byId('target-prefix').value = '24';
+  byId('subnet-ack').checked = false;
+}
+function ipv4Number(value) {
+  const parts = value.split('.');
+  if (parts.length !== 4 || !parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255)) return null;
+  return parts.reduce((address, part) => address * 256 + Number(part), 0);
+}
+function renderSubnet() {
+  const targetText = byId('target-ip').value.trim();
+  const prefixText = byId('target-prefix').value;
+  const context = JSON.stringify([selected, targetText, prefixText, status?.advertise, status?.port]);
+  if (context !== subnetContext) {
+    subnetContext = context;
+    byId('subnet-ack').checked = false;
+  }
+  const target = ipv4Number(targetText);
+  const host = ipv4Number(typeof status?.advertise === 'string' ? status.advertise : '');
+  const prefix = /^\d+$/.test(prefixText) ? Number(prefixText) : NaN;
+  differentSubnet = false;
+  let message = 'Target subnet: unknown — enter the target IPv4 from an independent check. No subnet comparison is available.';
+  if (targetText && target === null) message = 'Target subnet: unknown — enter a valid target IPv4 address.';
+  else if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) message = 'Target subnet: unknown — comparison prefix must be an integer from 0 to 32.';
+  else if (target !== null && host !== null) {
+    const blockSize = 2 ** (32 - prefix);
+    differentSubnet = Math.floor(target / blockSize) !== Math.floor(host / blockSize);
+    message = differentSubnet
+      ? 'Warning: target and firmware host are on different subnets under your /' + prefix + ' assumption. Routing and firewall access are needed. You may acknowledge this warning and continue.'
+      : 'Target and firmware host share a subnet under your /' + prefix + ' assumption. This does NOT prove reachability.';
+  } else if (target !== null) message = 'Target subnet: unknown — server IPv4 is unavailable.';
+  byId('subnet-status').textContent = message;
+  byId('subnet-ack-label').hidden = !differentSubnet;
+}
+function renderWifi() {
+  const wifi = status?.wifi?.address === selected && selected ? status.wifi : null;
+  const select = byId('wifi-networks');
+  const previous = select.value;
+  select.replaceChildren(new Option('Choose a scanned SSID, or enter one below', ''));
+  for (const network of (Array.isArray(wifi?.networks) ? wifi.networks : [])) {
+    const ssid = typeof network === 'string' ? network : network.ssid;
+    if (typeof ssid === 'string' && ssid) select.append(new Option(ssid, ssid));
+  }
+  select.value = previous;
+  select.disabled = pending || !online || Boolean(status?.busy) || select.options.length < 2;
+  byId('wifi-accepted').textContent = wifi?.credentials_accepted === true
+    ? 'Credentials: accepted by stock commands. Wi-Fi connection is NOT verified.'
+    : 'Credentials: no command acceptance confirmed for this target.';
+  const reason = typeof wifi?.reason === 'string' ? ' · Reason: ' + wifi.reason : '';
+  const reasonCode = Number.isInteger(wifi?.reasonCode) ? ' · Reason code: ' + wifi.reasonCode : '';
+  byId('wifi-status').textContent = 'Device Wi-Fi report: ' + (typeof wifi?.status === 'string' ? wifi.status : 'none') + reason + reasonCode + '. This is not an independent LAN reachability check.';
+}
+byId('wifi-networks').addEventListener('change', () => {
+  if (byId('wifi-networks').value) byId('wifi-ssid').value = byId('wifi-networks').value;
+});
+byId('network-verified').addEventListener('change', updateControls);
+byId('update-protocol').addEventListener('change', updateControls);
+for (const id of ['target-ip', 'target-prefix']) byId(id).addEventListener('input', () => { byId('subnet-ack').checked = false; updateControls(); });
+byId('wifi-scan').addEventListener('click', () => {
+  const device = status?.devices?.find(d => d.address === selected);
+  if (!device?.wsup_service || pending || !online || status.busy) return;
+  if (window.confirm('Scan Wi-Fi networks using ' + (device.name || 'Unnamed device') + ' (' + device.address + ')? No credentials or firmware will be sent.')) {
+    post('/api/wifi_scan', {address:device.address, confirm:true});
+  }
+});
+byId('wifi-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const device = status?.devices?.find(d => d.address === selected);
+  if (!device?.wsup_service || pending || !online || status.busy) return;
+  const ssid = byId('wifi-ssid').value;
+  if (!window.confirm('Configure Wi-Fi on ' + (device.name || 'Unnamed device') + ' (' + device.address + ') for SSID “' + ssid + '”? This changes stored Wi-Fi credentials. No firmware will be sent.')) return;
+  byId('network-verified').checked = false;
+  const payload = {address:device.address, confirm:true, ssid, password:byId('wifi-password').value};
+  byId('wifi-password').value = '';
+  post('/api/wifi_configure', payload);
+});
+window.addEventListener('pagehide', () => { byId('wifi-password').value = ''; });
+byId('scan').addEventListener('click', () => post('/api/scan', {}));
+byId('probe').addEventListener('click', () => {
+  const device = status?.devices?.find(d => d.address === selected);
+  if (!device || pending || !online || status.busy) return;
+  if (window.confirm('Probe version and protocol on ' + (device.name || 'Unnamed device') + ' (' + device.address + ')? This is read-only. No settings, credentials, or firmware will be written.')) {
+    post('/api/probe', {address:device.address, confirm:true});
+  }
+});
+function confirmFlash(image) {
+  if (!imageSafetySupported() || (image === 'esphome' && !esphomeSelectionReady())) return;
+  const device = status?.devices?.find(d => d.address === selected);
+  if (!device?.wsup_service || !canFlashSelected() || !status?.images?.[image] || !byId('network-verified').checked || status.busy || pending || !online) return;
+  renderSubnet();
+  if (differentSubnet && !byId('subnet-ack').checked) {
+    if (!window.confirm('Different-subnet warning: under your configured prefix, the target and firmware host differ. Have you independently checked routing and firewall access, and want to proceed anyway?')) return;
+    byId('subnet-ack').checked = true;
+  }
+  const action = image === 'stock' ? 'Restore stock firmware' : 'Install ESPHome';
+  const warning = image === 'stock'
+    ? 'This restore works only while the device is running supported stock firmware. If ESPHome is installed, use ESPHome OTA instead.'
+    : 'This replaces the current firmware. After ESPHome is installed, use ESPHome OTA; this stock BLE tool cannot restore it.';
+  if (window.confirm(action + ' on ' + (device.name || 'Unnamed device') + ' (' + device.address + ')?\n\nChosen protocol: ' + protocolLabel(chosenProtocol()) + (byId('update-protocol').value === 'auto' ? ' (auto)' : ' (manual override)') + '\n\n' + loadedImageText(status.images[image]) + '\n\n' + warning + '\n\nHTTP transfer completion does not prove a successful flash or boot. Continue?')) {
+    const payload = {address:device.address, image, image_sha256:status.images[image].sha256, confirm:true};
+    if (byId('update-protocol').value !== 'auto') payload.protocol = chosenProtocol();
+    post('/api/flash', payload);
+  }
+}
+byId('flash').addEventListener('click', () => confirmFlash('esphome'));
+byId('restore').addEventListener('click', () => confirmFlash('stock'));
+async function poll() { await refresh(); setTimeout(poll, 1500); }
+poll();
+</script>
+</body>
+</html>
