@@ -43,6 +43,8 @@ jobs:
         run: esphome compile esphome/hatch-rest.yaml
       - name: Compile standalone Rest+ power harness (never flash)
         run: esphome compile esphome/hatch-plus-power-compile.yaml
+      - name: Compile standalone shared button classifier (never flash)
+        run: esphome compile esphome/hatch-buttons-check.yaml
       # Deliberately do not publish this binary: it contains CI-only credentials.
       - name: Remove temporary credentials
         if: always()

@@ -1,0 +1,67 @@
+# Compile-only fake-input fixture. Never flash this as a hardware image.
+esphome:
+  name: hatch-buttons-check
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+logger:
+wifi:
+  ssid: BUILD-CHECK-NOT-FOR-FLASHING
+  password: build-check-only
+api:
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_buttons]
+hatch_buttons:
+  id: buttons
+  buttons:
+    - name: touch
+    - name: bottom
+  on_button:
+    - homeassistant.event:
+        event: esphome.hatch_button
+        data:
+          device: hatch-buttons-check
+          button: !lambda return button;
+          gesture: !lambda return gesture;
+  on_press:
+    - lambda: ESP_LOGD("test", "Press %s", button.c_str());
+  on_release:
+    - lambda: ESP_LOGD("test", "Release %s after %u ms", button.c_str(), (unsigned) duration);
+  on_cancel:
+    - lambda: ESP_LOGD("test", "Cancel %s", button.c_str());
+binary_sensor:
+  - platform: template
+    id: fake_touch
+    on_press:
+      - lambda: id(buttons).button_event("touch", true);
+    on_release:
+      - lambda: id(buttons).button_event("touch", false);
+  - platform: template
+    id: fake_bottom
+    on_press:
+      - lambda: id(buttons).button_event("bottom", true);
+    on_release:
+      - lambda: id(buttons).button_event("bottom", false);
+button:
+  - platform: template
+    name: Fake Tap
+    on_press:
+      - binary_sensor.template.publish:
+          id: fake_touch
+          state: ON
+      - delay: 50ms
+      - binary_sensor.template.publish:
+          id: fake_touch
+          state: OFF
+switch:
+  - platform: template
+    name: Child Lock
+    optimistic: true
+    on_turn_on:
+      - lambda: id(buttons).set_child_lock(true);
+    on_turn_off:
+      - lambda: id(buttons).set_child_lock(false);

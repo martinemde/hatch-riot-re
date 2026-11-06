@@ -20,6 +20,9 @@ component sources, using the stub headers under `tests/host/<area>/` (include pa
 per-area on purpose: every area stubs exactly the ESPHome surface its component needs,
 e.g. the display area's `uart.h` records every frame written to the display MCU).
 
+The optional shared `hatch_buttons` component, compile fixture and Home Assistant
+blueprint checks are documented in [the button guide](../docs/hatch-buttons.md#testing-both-models).
+
 ## Adding a test
 
 1. Create `tests/host/<area>/` with the stub headers the component includes.
