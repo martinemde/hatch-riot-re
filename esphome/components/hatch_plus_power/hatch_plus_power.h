@@ -1,0 +1,138 @@
+#pragma once
+
+#include "esphome/core/component.h"
+#include "esphome/components/hatch_expander/hatch_expander.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
+#include "power_status.h"
+#include "runtime_adapter.h"
+#include "native_i2c_transport.h"
+#include "esphome/components/i2c/i2c_bus.h"
+#include "adc_idf_adapter.h"
+#include "greenpak_boot_transport.h"
+#include "load_register_transport.h"
+#include "load_controller.h"
+#include "esphome/components/light/light_state.h"
+#include "esphome/components/media_player/media_player.h"
+#include "esphome/components/speaker/speaker.h"
+#include "esphome/components/hatch_display/hatch_display.h"
+#include <memory>
+
+namespace esphome::hatch_plus_power {
+
+// Diagnostics by default. Experimental local control requires explicit allow_control.
+class HatchPlusPower : public PollingComponent {
+ public:
+  void setup() override;
+  void loop() override;
+  void set_allow_control(bool value) { allow_control_ = value; }
+  // Indicator calls share this owner's discovered device and main-loop transport.
+  bool indicators_ready() const { return allow_control_ && found_ == 0 && runtime_ && !stopped_ && !preparing_ && !is_failed(); }
+  bool set_indicator(uint8_t index, uint8_t state);
+  float indicator_battery_percent() const;
+  bool indicator_charging() const { return hardware_status_valid_ && charging_enabled_with_power_; }
+  void set_allow_nvm_programming(bool value) { allow_nvm_programming_ = value; }
+  void set_light(light::LightState *value) { light_ = value; }
+  void set_speaker(speaker::Speaker *value) { speaker_ = value; }
+  void set_player(media_player::MediaPlayer *value) { player_ = value; }
+  void set_pwm_channels(const std::vector<uint8_t> &channels) { pwm_channels_ = channels; }
+  void set_display(hatch_display::HatchDisplay *value) { display_ = value; }
+  int variant() { return 2; }
+  // Battery state and publication run on the ESPHome loop, with no competing writer.
+  int battery_report_lock() { return 1; }
+  void battery_report_unlock() {}
+  bool disable_critical() { return false; }
+  uint32_t tick();
+  void delay(unsigned ticks);
+  int lock();
+  void unlock() { app_locked_ = false; }
+  bool amplifier() { return amplifier_enabled(load_); }
+  bool led_wait() { return leds_enabled(load_); }
+  void configure_virtual(unsigned bus, unsigned chip, unsigned reg, unsigned value);
+  void source_changed(unsigned label);
+  int reset_greenpak();
+  void display(bool reset);
+  void prepare();
+  void state_shutdown(unsigned reason);
+  bool prepare_power_off();
+  void power_off_result(bool ok);
+  void drain_logs();
+  void external_critical();
+  void service(uint32_t index, uint32_t delta);
+  // Load-controller IO uses physical output latch transport, never UI state.
+  bool device() { return loads_ != nullptr; }
+  int write(unsigned pin, unsigned encoded) { return loads_->write(pin, encoded); }
+  int read(unsigned pin, uint8_t &value) { return loads_->read(pin, value); }
+  bool amp_lock() { if (amp_locked_) return false; amp_locked_ = true; return true; }
+  void amp_unlock() { amp_locked_ = false; }
+  int led_lock() { if (led_locked_) return 0; led_locked_ = true; return 1; }
+  void led_unlock() { led_locked_ = false; }
+  void update(unsigned group, bool ok);
+  void timer_stop() { amp_timer_active_ = false; }
+  bool timer_active() { return amp_timer_active_; }
+  bool timer_start(uint32_t now) { amp_timer_tick_ = now; return amp_timer_active_ = true; }
+  bool led_busy();
+  void periodic();
+
+  void update() override;
+  void dump_config() override;
+  void on_shutdown() override { this->stopped_ = true; }
+  float get_setup_priority() const override { return setup_priority::DATA; }
+  void set_expander(hatch_expander::HatchExpander *expander) { this->expander_ = expander; }
+  void set_i2c_bus(i2c::I2CBus *bus) { power_bus_ = bus; }
+  void set_battery_percent(sensor::Sensor *sensor) { battery_percent_ = sensor; }
+  void set_battery_report_age(sensor::Sensor *sensor) { battery_report_age_ = sensor; }
+  void set_battery_report_accepted(binary_sensor::BinarySensor *sensor) { battery_report_accepted_ = sensor; }
+  void set_owner_fault(binary_sensor::BinarySensor *sensor) { owner_fault_sensor_ = sensor; }
+  void set_power_status(sensor::Sensor *sensor) { power_status_ = sensor; }
+  void set_status_74(sensor::Sensor *sensor) { this->status_74_ = sensor; }
+  void set_status_75(sensor::Sensor *sensor) { this->status_75_ = sensor; }
+  void set_status_76(sensor::Sensor *sensor) { this->status_76_ = sensor; }
+  void set_external_power_present(binary_sensor::BinarySensor *sensor) { this->external_power_ = sensor; }
+  void set_wireless_voltage_present(binary_sensor::BinarySensor *sensor) { this->wireless_voltage_ = sensor; }
+  void set_charge_enable_logic(binary_sensor::BinarySensor *sensor) { this->charge_enable_ = sensor; }
+
+ protected:
+  // RAM 0x74 bit6 is wired external voltage, bit5 is wireless voltage;
+  // RAM 0x76 bit2 is charge-enable logic, not confirmed battery charging.
+  // Unlike stock external_charger (wired OR accepted wireless), these live
+  // hardware levels become unknown after a failed telemetry read.
+  void publish_hardware_status_();
+  using Bus = NativeI2CBus<i2c::I2CBus>;
+  i2c::I2CBus *power_bus_{nullptr};
+  using Runtime = PowerRuntime<Bus, EspIdfAdc, HatchPlusPower>;
+  std::unique_ptr<Bus> bus_;
+  std::unique_ptr<Runtime> runtime_;
+  std::unique_ptr<GreenPakBootTransport<Bus, HatchPlusPower>> boot_;
+  std::unique_ptr<LoadRegisterTransport<hatch_expander::HatchExpander>> loads_;
+  EspIdfAdc adc_;
+  LoadState load_;
+  std::vector<uint8_t> pwm_channels_;
+  light::LightState *light_{nullptr};
+  media_player::MediaPlayer *player_{nullptr};
+  speaker::Speaker *speaker_{nullptr};
+  hatch_display::HatchDisplay *display_{nullptr};
+  unsigned found_{2}, shutdown_reason_{0};
+  uint32_t amp_timer_tick_{0}, led_second_tick_{0}, quiet_start_{0}, quiet_ticks_{0}, speaker_ready_tick_{0};
+  bool speaker_ready_{false};
+  bool power_off_failed_{false}, power_off_committed_{false}, wifi_disabled_for_power_off_{false}, indicator_blank_failed_{false};
+  bool allow_nvm_programming_{false}, owner_fault_{false};
+  bool allow_control_{false}, app_locked_{false}, amp_locked_{false}, led_locked_{false};
+  bool amp_timer_active_{false}, init_failed_{false}, preparing_{false};
+  bool desired_amp_{false}, desired_led_{false}, desired_initialized_{false};
+  hatch_expander::HatchExpander *expander_{nullptr};
+  sensor::Sensor *battery_percent_{nullptr};
+  sensor::Sensor *battery_report_age_{nullptr};
+  binary_sensor::BinarySensor *battery_report_accepted_{nullptr};
+  binary_sensor::BinarySensor *owner_fault_sensor_{nullptr};
+  sensor::Sensor *power_status_{nullptr};
+  sensor::Sensor *status_74_{nullptr};
+  sensor::Sensor *status_75_{nullptr};
+  sensor::Sensor *status_76_{nullptr};
+  binary_sensor::BinarySensor *external_power_{nullptr};
+  binary_sensor::BinarySensor *wireless_voltage_{nullptr};
+  binary_sensor::BinarySensor *charge_enable_{nullptr};
+  bool hardware_status_valid_{false}, charging_enabled_with_power_{false};
+  bool stopped_{false};
+};
+}  // namespace esphome::hatch_plus_power

@@ -1,0 +1,105 @@
+# Compile-only Rest+ power harness. NOT a flashable or safety-approved example.
+esphome:
+  name: hatch-plus-power-compile
+esp32:
+  board: esp32dev
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+psram:
+  mode: quad
+  speed: 80MHz
+logger:
+  baud_rate: 0
+# Placeholder only; the harness contains no real network credentials.
+wifi:
+  ssid: COMPILE-ONLY-DO-NOT-FLASH
+  password: compile-only-placeholder
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_expander, hatch_display, hatch_plus_power, hatch_plus_indicator_probe]
+hatch_expander:
+  id: io_exp
+  sda: GPIO0
+  scl: GPIO22
+  address: 0x58
+  frequency: 50kHz
+  interrupt_pin: GPIO34
+i2c:
+  id: plus_bus1
+  sda: GPIO13
+  scl: GPIO23
+  frequency: 100kHz
+  scan: false
+uart:
+  id: disp_uart
+  tx_pin: GPIO27
+  baud_rate: 19200
+  parity: ODD
+hatch_display:
+  id: clock_display
+  uart_id: disp_uart
+output:
+  - platform: ledc
+    id: ch_r
+    channel: 0
+    pin: GPIO5
+  - platform: ledc
+    id: ch_g
+    channel: 1
+    pin: GPIO18
+  - platform: ledc
+    id: ch_b
+    channel: 2
+    pin: GPIO19
+  - platform: ledc
+    id: ch_w
+    channel: 3
+    pin: GPIO4
+light:
+  - platform: rgbw
+    id: night_light
+    red: ch_r
+    green: ch_g
+    blue: ch_b
+    white: ch_w
+    restore_mode: ALWAYS_OFF
+i2s_audio:
+  id: i2s_out
+  i2s_lrclk_pin: GPIO25
+  i2s_bclk_pin: GPIO26
+speaker:
+  - platform: i2s_audio
+    id: spk
+    i2s_audio_id: i2s_out
+    dac_type: external
+    i2s_dout_pin: GPIO21
+    channel: mono
+    bits_per_sample: 16bit
+    sample_rate: 48000
+media_player:
+  - platform: speaker
+    id: player
+    announcement_pipeline:
+      speaker: spk
+      format: WAV
+hatch_plus_power:
+  id: power_owner
+  hatch_expander_id: io_exp
+  i2c_id: plus_bus1
+  # Deliberately compile the full control path; do not flash this harness.
+  allow_control: true
+  allow_nvm_programming: false
+  light_id: night_light
+  media_player_id: player
+  speaker_id: spk
+  display_id: clock_display
+  pwm_channels: [0, 1, 2, 3]
+  battery_percent:
+    name: Battery
+  owner_fault:
+    name: Power Owner Fault
+hatch_plus_indicator_probe:
+  i2c_id: plus_bus1

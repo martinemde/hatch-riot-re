@@ -24,6 +24,11 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   void set_interrupt_pin(InternalGPIOPin *pin) { this->interrupt_pin_ = pin; }
   void set_p0_push_pull(bool on) { this->p0_push_pull_ = on; }
 
+  // Error-visible output-latch access for the recovered load controller. Physical
+  // pins only; restricted to STOCK_MASK, preserving all unrelated latch bits.
+  int initialize_load_outputs_status();
+  int read_output_pin_status(uint8_t pin, bool &value);
+  int write_output_pin_status(uint8_t pin, bool value);
   void pin_mode(uint8_t pin, gpio::Flags flags);
 
  protected:
@@ -56,6 +61,7 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   bool bb_write_byte_(uint8_t byte);  // true on ACK
   bool bb_read_byte_(uint8_t *byte, bool ack);
   bool bb_write_reg_(uint8_t reg, uint8_t value);
+  bool bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len);
   bool bb_read_regs_(uint8_t reg, uint8_t *data, size_t len);
   void bb_fail_(const char *what);
 

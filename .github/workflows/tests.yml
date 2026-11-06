@@ -36,4 +36,4 @@ jobs:
           mkdir -p esphome/.esphome/build/ci/managed_components
           git clone --depth 1 https://github.com/esphome-libs/micro-wav \
             esphome/.esphome/build/ci/managed_components/esphome__micro-wav
-      - run: python -m pytest tests/ -q
+      - run: python -m pytest tests/ esphome/components/hatch_plus_power/tests/ -q
