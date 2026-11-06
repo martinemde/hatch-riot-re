@@ -25,3 +25,7 @@ e.g. the display area's `uart.h` records every frame written to the display MCU)
 1. Create `tests/host/<area>/` with the stub headers the component includes.
 2. Add a `<name>_test.cpp` with plain `assert()`s and a `main()`.
 3. Add `tests/test_<area>.py` that compiles and runs it (copy `test_hatch_display.py`).
+
+`test_hatch_scenes.py` covers persistent URI favorites, complete preset snapshots,
+legacy records, and scene-management hold/cancel behavior. See
+`docs/hatch-scenes.md` for the full compile fixture and hardware test checklist.

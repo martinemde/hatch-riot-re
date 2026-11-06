@@ -1,0 +1,112 @@
+# Compile-only scenes fixture; not a hardware image.
+# No credentials, expander, power controller, accelerometer, or status indicators.
+esphome:
+  name: hatch-scenes-check
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+logger:
+psram:
+  mode: quad
+  speed: 80MHz
+wifi:
+  ssid: BUILD-CHECK-NOT-FOR-FLASHING
+  password: build-check-only
+api:
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_scenes, hatch_display, speaker_source]
+output:
+  - platform: template
+    id: light_output
+    type: float
+    write_action:
+      - lambda: (void) state;
+light:
+  - platform: monochromatic
+    id: night_light
+    output: light_output
+  - platform: monochromatic
+    id: clock_light
+    output: light_output
+    name: Clock Light
+i2s_audio:
+  id: audio_bus
+  i2s_lrclk_pin: GPIO25
+  i2s_bclk_pin: GPIO26
+speaker:
+  - platform: i2s_audio
+    id: test_speaker
+    i2s_audio_id: audio_bus
+    dac_type: external
+    i2s_dout_pin: GPIO21
+    channel: mono
+    sample_rate: 48000
+media_source:
+  - platform: audio_http
+    id: http_source
+media_player:
+  - platform: speaker_source
+    id: player
+    media_pipeline:
+      speaker: test_speaker
+      sources: [http_source]
+      format: NONE
+uart:
+  id: display_uart
+  tx_pin: GPIO27
+  baud_rate: 19200
+  parity: ODD
+hatch_display:
+  id: clock_display
+  uart_id: display_uart
+select:
+  - platform: template
+    id: stock_sound
+    optimistic: true
+    options: [None, Rain]
+switch:
+  - platform: template
+    id: loop_sound
+    optimistic: true
+  - platform: template
+    id: show_clock
+    optimistic: true
+text:
+  - platform: template
+    id: display_text
+    mode: text
+    optimistic: true
+hatch_scenes:
+  id: scenes
+  light_id: night_light
+  media_player_id: player
+  presets:
+    stock_sound_id: stock_sound
+    loop_switch_id: loop_sound
+    clock_switch_id: show_clock
+    clock_light_id: clock_light
+    text_id: display_text
+    display_id: clock_display
+
+button:
+  - platform: template
+    name: Exercise Controller API
+    on_press:
+      - lambda: |-
+          id(scenes).management_press();
+          id(scenes).management_release(5000);
+          id(scenes).management_cancel();
+          id(scenes).configure_favorite(0, "https://example.org/rain.wav", true);
+          id(scenes).capture(0);
+          id(scenes).play(0);
+          id(scenes).save_current();
+          id(scenes).store_preset(1, "Rain");
+          id(scenes).apply_preset(1);
+          id(scenes).next();
+          id(scenes).previous();
+          id(scenes).erase(1);
+          id(scenes).stop();
