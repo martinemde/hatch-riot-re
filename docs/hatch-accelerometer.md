@@ -18,7 +18,6 @@ hatch_accelerometer:
   allow_initialization: true
   tilt_angle:
     name: Tilt Angle
-    disabled_by_default: true
     filters:
       - delta: 2.0
   upright:
@@ -31,10 +30,15 @@ DA213 ID and does not publish samples. With initialization enabled, it checks
 the ID before applying the stock reset and configuration, then samples at
 `update_interval` (default `1s`). In [PR #7's hardware report][pr7], Rest
 entities stayed unknown until initialization was enabled. Do not rely on the
-stock configuration surviving a cold boot. The same report observed about ±1°
-of tilt jitter and pre-existing expander bus errors. A delta filter or a
-longer `update_interval` can reduce Home Assistant history updates; neither
-fixes bus errors. This change was not flashed or tested on hardware.
+stock configuration surviving a cold boot.
+
+Tilt Angle is disabled by default in Home Assistant. Enable it there if you
+want the angle, or set `disabled_by_default: false` in YAML for new installs.
+The example's delta filter reduces updates from the reported ±1° jitter.
+Disabling the entity or filtering its updates does not stop I2C reads. To
+reduce reads, increase `update_interval`. To measure baseline expander errors,
+compare against a build without `hatch_accelerometer` on the same device.
+This change was not flashed or tested on hardware.
 
 Optional diagnostic entity keys are `acceleration_x`, `acceleration_y`,
 `acceleration_z` (g), `tilt_angle` (degrees), `upright` and `not_upright`.

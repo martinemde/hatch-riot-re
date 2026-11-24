@@ -4,7 +4,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import binary_sensor, sensor
 from esphome.components.hatch_expander import HatchExpander
-from esphome.const import CONF_ID
+from esphome.const import CONF_DISABLED_BY_DEFAULT, CONF_ID
 
 DEPENDENCIES = ["hatch_expander"]
 AUTO_LOAD = ["sensor", "binary_sensor"]
@@ -37,7 +37,7 @@ CONFIG_SCHEMA = cv.Schema(
             state_class="measurement",
             icon="mdi:angle-acute",
             entity_category="diagnostic",
-        ),
+        ).extend({cv.Optional(CONF_DISABLED_BY_DEFAULT, default=True): cv.boolean}),
         cv.Optional("upright"): binary_sensor.binary_sensor_schema(
             icon="mdi:axis-z-arrow", entity_category="diagnostic"
         ),
