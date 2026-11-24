@@ -3,6 +3,7 @@
 #include <cassert>
 
 using namespace esphome;
+using hatch_accelerometer::AccelerometerModel;
 using hatch_accelerometer::HatchAccelerometer;
 using hatch_expander::HatchExpander;
 
@@ -98,7 +99,85 @@ static void test_initialization_and_samples() {
   assert(bus.reads.empty());
 }
 
+static void test_msa311_read_only_discovery() {
+  HatchExpander bus;
+  HatchAccelerometer accel;
+  accel.set_expander(&bus);
+  accel.set_model(AccelerometerModel::MSA311);
+  accel.update();
+  accel.update();
+  assert((bus.reads == std::vector<HatchExpander::Read>{{0x62, 0x01, 1}, {0x62, 0x11, 1}}));
+  assert(bus.writes.empty());
+  assert(!accel.valid());
+}
+
+static void test_msa311_rejects_unverified_devices() {
+  HatchExpander bus;
+  HatchAccelerometer accel;
+  accel.set_expander(&bus);
+  accel.set_model(AccelerometerModel::MSA311);
+  accel.set_allow_initialization(true);
+
+  bus.id = 0x12;
+  accel.update();
+  assert((bus.reads == std::vector<HatchExpander::Read>{{0x62, 0x01, 1}}));
+  assert(bus.writes.empty() && !accel.valid());
+
+  const std::vector<HatchExpander::Read> probe{{0x62, 0x01, 1}, {0x62, 0x11, 1}};
+  bus.reads.clear();
+  bus.id = 0x13;
+  bus.msa311_mode = 0xDE;  // MSA321 shares the MSA311 chip ID.
+  accel.update();
+  assert(bus.reads == probe);
+  assert(bus.writes.empty() && !accel.valid());
+
+  bus.reads.clear();
+  bus.msa311_mode = 0x00;
+  bus.fail_read_reg = 0x11;
+  accel.update();
+  assert(bus.reads == probe);
+  assert(bus.writes.empty() && !accel.valid());
+}
+
+static void test_msa311_initialization_and_samples() {
+  HatchExpander bus;
+  HatchAccelerometer accel;
+  sensor::Sensor x, y, z;
+  accel.set_expander(&bus);
+  accel.set_model(AccelerometerModel::MSA311);
+  accel.set_allow_initialization(true);
+  accel.set_acceleration_x(&x);
+  accel.set_acceleration_y(&y);
+  accel.set_acceleration_z(&z);
+
+  accel.update();
+  assert((bus.reads == std::vector<HatchExpander::Read>{{0x62, 0x01, 1}, {0x62, 0x11, 1}}));
+  const std::vector<HatchExpander::Write> stock_writes{{0x62, 0x00, {0x24}},
+                                                     {0x62, 0x10, {0x2C}},
+                                                     {0x62, 0x11, {0x1E}}};
+  assert(bus.writes == stock_writes);
+  assert(!accel.valid());
+
+  bus.reads.clear();
+  // Nonzero low bits distinguish signed division from arithmetic right shift.
+  bus.raw = {0x0F, 0x40, 0xE1, 0xDF, 0x00, 0xE0};
+  accel.update();
+  assert((bus.reads == std::vector<HatchExpander::Read>{{0x62, 0x02, 6}}));
+  assert(accel.valid() && accel.is_upright());
+  assert(x.state == 1.0f && y.state == -513.0f / 1024.0f && z.state == -0.5f);
+
+  // One native count above the -0.5 g upright threshold.
+  bus.raw[4] = 0x10;
+  accel.update();
+  assert(accel.valid() && !accel.is_upright());
+  assert(z.state == -511.0f / 1024.0f);
+  assert(bus.writes == stock_writes);
+}
+
 int main() {
   test_read_only_discovery();
   test_initialization_and_samples();
+  test_msa311_read_only_discovery();
+  test_msa311_rejects_unverified_devices();
+  test_msa311_initialization_and_samples();
 }

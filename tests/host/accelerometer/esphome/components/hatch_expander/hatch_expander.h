@@ -15,7 +15,9 @@ class HatchExpander {
   std::vector<Read> reads;
   std::array<uint8_t, 6> raw{0, 0, 0, 0, 0, 0xC0};
   uint8_t id{0x13};
+  uint8_t msa311_mode{0x00};
   bool fail_read{false};
+  int fail_read_reg{-1};
   int fail_write_reg{-1};
 
   bool write_device_registers(uint8_t address, uint8_t reg, const uint8_t *data, size_t len) {
@@ -25,13 +27,17 @@ class HatchExpander {
 
   bool read_device_registers(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
     reads.emplace_back(address, reg, len);
-    if (fail_read)
+    if (fail_read || fail_read_reg == reg)
       return false;
     if (reg == 0x02) {
       for (size_t i = 0; i < len; i++)
         data[i] = raw.at(i);
-    } else {
+    } else if (reg == 0x01) {
       *data = id;
+    } else if (reg == 0x11) {
+      *data = msa311_mode;
+    } else {
+      return false;
     }
     return true;
   }

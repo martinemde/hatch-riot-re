@@ -19,10 +19,13 @@ struct Acceleration {
   }
 };
 
-inline Acceleration decode_da213(const uint8_t *raw) {
+inline Acceleration decode_acceleration(const uint8_t *raw, bool msa311) {
   Acceleration result{};
-  for (unsigned i = 0; i < 3; i++)
-    result.counts[i] = int16_t(uint16_t(raw[2 * i]) | (uint16_t(raw[2 * i + 1]) << 8)) / 4;
+  for (unsigned i = 0; i < 3; i++) {
+    const auto word = int16_t(uint16_t(raw[2 * i]) | (uint16_t(raw[2 * i + 1]) << 8));
+    // MSA311 samples are 12-bit. Normalize to the same 4096 counts/g as DA213.
+    result.counts[i] = msa311 ? (word / 16) * 4 : word / 4;
+  }
   return result;
 }
 

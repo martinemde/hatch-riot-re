@@ -1,9 +1,11 @@
-# Optional Hatch DA213 accelerometer
+# Optional Hatch accelerometer
 
 On a Hatch fitted with the [MiraMEMS DA213](hardware-map.md#accelerometer-da213),
 use the existing `hatch_expander` on stock **I2C0**: GPIO0 (SDA) and GPIO22
 (SCL). The expander is at `0x58`; the DA213 is at 7-bit address `0x27` and
-returns `0x13` in register `0x01`. On Rest+, the native I2C1 bus on GPIO13/23
+returns `0x13` in register `0x01`. Kewe’s Rest+ 2 (hardware `8.0.1`,
+stock `7.1.503`) instead responds at `0x62` and uses the MSA311 profile.
+On Rest+, the native I2C1 bus on GPIO13/23
 is for power peripherals, not the accelerometer. Do not create a second I2C
 master on GPIO0/22.
 
@@ -25,9 +27,17 @@ hatch_accelerometer:
     disabled_by_default: true
 ```
 
+The default `model: DA213` preserves the `0x27` setup. For a board verified
+to use the `0x62` MSA311-compatible sensor, set `model: MSA311`; do not
+change the model based on a bus error alone. The MSA311 profile requires
+ID `0x13` and rejects the `0xDE` value at register `0x11` used by stock
+firmware to distinguish the MSA321. It uses the `7.1.503` `0x62` setup
+and 12-bit samples, rather than the DA213’s 14-bit samples.
+
 By default `allow_initialization` is false: the component only checks the
-DA213 ID and does not publish samples. With initialization enabled, it checks
-the ID before applying the stock reset and configuration, then samples at
+configured sensor and does not write configuration or publish samples. With
+initialization enabled, it checks for a supported sensor before applying the
+stock reset and configuration, then samples at
 `update_interval` (default `1s`). In [PR #7's hardware report][pr7], Rest
 entities stayed unknown until initialization was enabled. Do not rely on the
 stock configuration surviving a cold boot.
@@ -38,7 +48,6 @@ The example's delta filter reduces updates from the reported ±1° jitter.
 Disabling the entity or filtering its updates does not stop I2C reads. To
 reduce reads, increase `update_interval`. To measure baseline expander errors,
 compare against a build without `hatch_accelerometer` on the same device.
-This change was not flashed or tested on hardware.
 
 Optional diagnostic entity keys are `acceleration_x`, `acceleration_y`,
 `acceleration_z` (g), `tilt_angle` (degrees), `upright` and `not_upright`.

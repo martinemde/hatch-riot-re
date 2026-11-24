@@ -1,10 +1,10 @@
-"""DA213 tilt sensing on the Hatch expander's shared I2C bus."""
+"""DA213/MSA311 tilt sensing on the Hatch expander's shared I2C bus."""
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import binary_sensor, sensor
 from esphome.components.hatch_expander import HatchExpander
-from esphome.const import CONF_DISABLED_BY_DEFAULT, CONF_ID
+from esphome.const import CONF_DISABLED_BY_DEFAULT, CONF_ID, CONF_MODEL
 
 DEPENDENCIES = ["hatch_expander"]
 AUTO_LOAD = ["sensor", "binary_sensor"]
@@ -16,10 +16,14 @@ AXIS_KEYS = {f"acceleration_{axis}": axis for axis in ("x", "y", "z")}
 ns = cg.esphome_ns.namespace("hatch_accelerometer")
 HatchAccelerometer = ns.class_("HatchAccelerometer", cg.PollingComponent)
 
+AccelerometerModel = ns.enum("AccelerometerModel", is_class=True)
+MODELS = {"DA213": AccelerometerModel.DA213, "MSA311": AccelerometerModel.MSA311}
+
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(HatchAccelerometer),
         cv.Required(CONF_HATCH_EXPANDER_ID): cv.use_id(HatchExpander),
+        cv.Optional(CONF_MODEL, default="DA213"): cv.enum(MODELS, upper=True),
         cv.Optional(CONF_ALLOW_INITIALIZATION, default=False): cv.boolean,
         **{
             cv.Optional(key): sensor.sensor_schema(
@@ -52,6 +56,7 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     cg.add(var.set_expander(await cg.get_variable(config[CONF_HATCH_EXPANDER_ID])))
+    cg.add(var.set_model(config[CONF_MODEL]))
     cg.add(var.set_allow_initialization(config[CONF_ALLOW_INITIALIZATION]))
     for key in (*AXIS_KEYS, "tilt_angle"):
         if key in config:
