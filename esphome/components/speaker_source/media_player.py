@@ -28,6 +28,7 @@ CODEOWNERS = ["@kahrendt"]
 CONF_ANNOUNCEMENT_PIPELINE = "announcement_pipeline"
 CONF_MEDIA_PIPELINE = "media_pipeline"
 CONF_ON_MUTE = "on_mute"
+CONF_ON_PLAY_URI = "on_play_uri"
 CONF_PIPELINE = "pipeline"
 CONF_ON_UNMUTE = "on_unmute"
 CONF_ON_VOLUME = "on_volume"
@@ -141,6 +142,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ON_MUTE): automation.validate_automation(single=True),
             cv.Optional(CONF_ON_UNMUTE): automation.validate_automation(single=True),
             cv.Optional(CONF_ON_VOLUME): automation.validate_automation(single=True),
+            cv.Optional(CONF_ON_PLAY_URI): automation.validate_automation(single=True),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -220,6 +222,12 @@ async def to_code(config: ConfigType) -> None:
             var.get_volume_trigger(),
             [(cg.float_, "x")],
             on_volume,
+        )
+    if on_play_uri := config.get(CONF_ON_PLAY_URI):
+        await automation.build_automation(
+            var.get_play_uri_trigger(),
+            [(cg.std_string, "x")],
+            on_play_uri,
         )
 
 

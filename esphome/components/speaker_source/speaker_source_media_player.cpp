@@ -2,6 +2,7 @@
 
 #ifdef USE_ESP32
 
+#include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
@@ -10,6 +11,10 @@
 namespace esphome::speaker_source {
 
 static constexpr uint32_t MEDIA_CONTROLS_QUEUE_LENGTH = 20;
+// Hatch: how long a play request waits for the old source to go idle before it is dropped. A source that ignores STOP
+// (Sendspin while its group is paused) would otherwise hold the head of the control queue, and every later command
+// behind it, until a reboot.
+static constexpr uint32_t STOP_TIMEOUT_MS = 5000;
 
 static const char *const TAG = "speaker_source_media_player";
 
@@ -160,8 +165,11 @@ void SpeakerSourceMediaPlayer::handle_media_state_changed_(uint8_t pipeline, med
       // Finish the speaker to ensure it's ready for the next playback
       ps.speaker->finish();
 
-      // Only advance the playlist if the track finished naturally (not stopped by the orchestrator)
-      if (!was_stopping) {
+      // Only advance the playlist if the track finished naturally (not stopped by the orchestrator).
+      // Hatch: never for a source with its own playlist (Sendspin): its end means the server stopped. With Loop Sound
+      // on, REPEAT_ONE would otherwise replay "sendspin://current" and leave Sendspin PLAYING with no stream, a state
+      // that neither STOP nor a disconnect clears.
+      if (!was_stopping && !source->has_internal_playlist()) {
         this->queue_command_(MediaPlayerControlCommand::PLAYLIST_ADVANCE, pipeline);
       }
     }
@@ -324,8 +332,13 @@ bool SpeakerSourceMediaPlayer::try_execute_play_uri_(const std::string &uri, uin
       if (ps.stopping_source != active_source) {
         ESP_LOGV(TAG, "Pipeline %u: stopping active source", pipeline);
         ps.stopping_source = active_source;
+        ps.stop_requested_ms = millis();
         active_source->handle_command(media_source::MediaSourceCommand::STOP);
         ps.speaker->stop();
+      } else if (millis() - ps.stop_requested_ms > STOP_TIMEOUT_MS) {
+        ESP_LOGW(TAG, "Pipeline %u: active source did not stop, dropping play request", pipeline);
+        ps.stopping_source = nullptr;
+        return true;  // Remove from queue so later commands can run
       }
       return false;  // Leave in queue, retry next loop
     }
@@ -338,8 +351,13 @@ bool SpeakerSourceMediaPlayer::try_execute_play_uri_(const std::string &uri, uin
     if (ps.stopping_source != target_source) {
       ESP_LOGV(TAG, "Pipeline %u: target source busy, stopping", pipeline);
       ps.stopping_source = target_source;
+      ps.stop_requested_ms = millis();
       target_source->handle_command(media_source::MediaSourceCommand::STOP);
       ps.speaker->stop();
+    } else if (millis() - ps.stop_requested_ms > STOP_TIMEOUT_MS) {
+      ESP_LOGW(TAG, "Pipeline %u: target source did not stop, dropping play request", pipeline);
+      ps.stopping_source = nullptr;
+      return true;  // Remove from queue so later commands can run
     }
     return false;  // Leave in queue, retry next loop
   }
@@ -718,6 +736,8 @@ void SpeakerSourceMediaPlayer::control(const media_player::MediaPlayerCall &call
 
   const auto &media_url = call.get_media_url();
   if (media_url.has_value()) {
+    // Hatch: lets the config release a source that won't stop on its own (Sendspin) before this play is queued.
+    this->play_uri_trigger_.trigger(media_url.value());
     auto command = call.get_command();
     bool enqueue = command.has_value() && command.value() == media_player::MEDIA_PLAYER_COMMAND_ENQUEUE;
 

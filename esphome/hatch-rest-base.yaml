@@ -44,6 +44,12 @@ psram:
 
 logger:
 
+# Saved settings (volume, selects, switches) are written to flash in one batch per interval. A write can stall audio for
+# over a second (Sendspin lost sync on each one), so batch them less often. Changes from the last 5 min before a power
+# cut are lost.
+preferences:
+  flash_write_interval: 5min
+
 api:
   encryption:
     key: !secret api_encryption_key
@@ -69,6 +75,9 @@ safe_mode:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # Radio always on: light sleep (the ESP32 default) delays and bunches packets, and Sendspin loses sync (stutter).
+  # Mains powered, so the extra draw doesn't matter.
+  power_save_mode: none
   # No ssid: the fallback AP takes the device name, MAC suffix included.
   ap:
     password: !secret fallback_ap_password
@@ -217,6 +226,16 @@ media_player:
       # Ask Home Assistant for the original media URL, not a transcoding-proxy URL: the proxy URL is new on every
       # play, so nothing would ever be found in the cache. The device decodes MP3, FLAC and WAV itself.
       format: NONE
+    # Sendspin only leaves its group while the group is playing, so a local play (Home Assistant play_media, Stock
+    # Sound) while Music Assistant still holds the speaker would wait on it. Ask Music Assistant to stop instead: the
+    # stream ends and Sendspin goes idle. Don't disconnect: a user_request goodbye makes MA mark the player unavailable
+    # and never reconnect.
+    on_play_uri:
+      - lambda: |-
+          if (x.rfind("sendspin://", 0) != 0 &&
+              id(sendspin_source).get_state() != media_source::MediaSourceState::IDLE) {
+            id(sendspin_hub).send_client_command(sendspin::SendspinControllerCommand::STOP);
+          }
     # Amp follows the player: on once the I2S clocks are running (enabling it first caused a loud pop), off 2 s
     # after going idle.
     on_state:
@@ -259,8 +278,6 @@ select:
       - Rockabye
     set_action:
       - lambda: |-
-          // Local playback must release Sendspin even when its remote group is paused.
-          id(sendspin_hub).disconnect_from_server(sendspin::SendspinGoodbyeReason::USER_REQUEST);
           if (x == "None") {
             id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
             return;
