@@ -1,0 +1,35 @@
+# Compile-only fixture; do not flash.
+esphome:
+  name: hatch-accelerometer-check
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+logger:
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_expander, hatch_accelerometer]
+hatch_expander:
+  id: io_exp
+  sda: GPIO0
+  scl: GPIO22
+  address: 0x58
+  frequency: 50kHz
+hatch_accelerometer:
+  id: hatch_accel
+  hatch_expander_id: io_exp
+  allow_initialization: true
+  acceleration_x:
+    name: Acceleration X
+  acceleration_y:
+    name: Acceleration Y
+  acceleration_z:
+    name: Acceleration Z
+  tilt_angle:
+    name: Tilt Angle
+  upright:
+    name: Upright
+  not_upright:
+    name: Not Upright

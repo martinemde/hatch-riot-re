@@ -25,6 +25,7 @@ static const int WRITE_ATTEMPTS = 3;
 // writes, and only accept input changes that two reads agree on.
 static const uint32_t MIN_GAP_MS = 5;
 static const int READ_ATTEMPTS = 3;
+static constexpr size_t MAX_SHARED_PAYLOAD = 240;
 // Without an interrupt pin, don't read more often than this (binary sensors poll every loop).
 static const uint32_t MIN_POLL_MS = 50;
 // With an interrupt pin, still re-read occasionally in case an edge was missed.
@@ -272,22 +273,41 @@ bool HatchExpander::update_reg_(uint8_t reg, uint8_t mask, uint8_t bits, bool ve
   return false;
 }
 
+bool HatchExpander::read_device_registers(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
+  if (!this->ready_ || address < 0x08 || address > 0x77 || address == this->address_ ||
+      data == nullptr || len == 0 || len > MAX_SHARED_PAYLOAD)
+    return false;
+  return this->read_regs_(address, reg, data, len);
+}
+
+bool HatchExpander::write_device_registers(uint8_t address, uint8_t reg, const uint8_t *data, size_t len) {
+  if (!this->ready_ || address < 0x08 || address > 0x77 || address == this->address_ ||
+      data == nullptr || len == 0 || len > MAX_SHARED_PAYLOAD)
+    return false;
+  return this->write_regs_(address, reg, data, len);
+}
+
 bool HatchExpander::write_reg_(uint8_t reg, uint8_t value) {
+  return this->write_regs_(this->address_, reg, &value, 1);
+}
+
+bool HatchExpander::write_regs_(uint8_t address, uint8_t reg, const uint8_t *data, size_t len) {
   for (int attempt = 1; attempt <= WRITE_ATTEMPTS; attempt++) {
     this->settle_();
-    bool ok = this->bb_write_reg_(reg, value);
+    bool ok = this->bb_write_regs_(address, reg, data, len);
     this->mark_txn_(ok ? SETTLE_MS : RETRY_GAP_MS);
     if (ok)
       return true;
-    ESP_LOGW(TAG, "Write reg 0x%02X <- 0x%02X failed (attempt %d/%d)", reg, value, attempt, WRITE_ATTEMPTS);
+    ESP_LOGW(TAG, "Write 0x%02X reg 0x%02X (%u bytes) failed (attempt %d/%d)", address, reg, unsigned(len), attempt,
+             WRITE_ATTEMPTS);
   }
   return false;
 }
 
-bool HatchExpander::read_regs_(uint8_t reg, uint8_t *data, size_t len) {
+bool HatchExpander::read_regs_(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
   for (int attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
     this->settle_();
-    bool ok = this->bb_read_regs_(reg, data, len);
+    bool ok = this->bb_read_regs_(address, reg, data, len);
     this->mark_txn_(ok ? MIN_GAP_MS : RETRY_GAP_MS);
     if (ok)
       return true;
@@ -417,16 +437,12 @@ bool HatchExpander::bb_read_byte_(uint8_t *byte, bool ack) {
   return true;
 }
 
-bool HatchExpander::bb_write_reg_(uint8_t reg, uint8_t value) {
-  return this->bb_write_regs_(reg, &value, 1);
-}
-
-bool HatchExpander::bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len) {
+bool HatchExpander::bb_write_regs_(uint8_t address, uint8_t reg, const uint8_t *data, size_t len) {
   if (!this->bb_start_()) {
     this->bb_fail_("start (bus busy)");
     return false;
   }
-  if (!this->bb_write_byte_(this->address_ << 1) || !this->bb_write_byte_(reg)) {
+  if (!this->bb_write_byte_(address << 1) || !this->bb_write_byte_(reg)) {
     this->bb_fail_("write NACK");
     return false;
   }
@@ -439,17 +455,17 @@ bool HatchExpander::bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len)
   return this->bb_stop_();
 }
 
-bool HatchExpander::bb_read_regs_(uint8_t reg, uint8_t *data, size_t len) {
+bool HatchExpander::bb_read_regs_(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
   if (!this->bb_start_()) {
     this->bb_fail_("start (bus busy)");
     return false;
   }
-  if (!this->bb_write_byte_(this->address_ << 1) || !this->bb_write_byte_(reg)) {
+  if (!this->bb_write_byte_(address << 1) || !this->bb_write_byte_(reg)) {
     this->bb_fail_("read: register NACK");
     return false;
   }
   // Repeated START, then read.
-  if (!this->bb_start_() || !this->bb_write_byte_((this->address_ << 1) | 1)) {
+  if (!this->bb_start_() || !this->bb_write_byte_((address << 1) | 1)) {
     this->bb_fail_("read: address NACK");
     return false;
   }
