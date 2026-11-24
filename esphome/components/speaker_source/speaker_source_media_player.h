@@ -97,6 +97,7 @@ struct PipelineContext {
   media_source::MediaSource *last_source{nullptr};
   media_source::MediaSource *stopping_source{nullptr};  // Source we've asked to stop, awaiting IDLE
   media_source::MediaSource *pending_source{nullptr};   // Source we've asked to play, awaiting PLAYING
+  uint32_t stop_requested_ms{0};                        // Hatch: when stopping_source was asked to stop
 
   // Each SourceBinding pairs a MediaSource* with its listener implementation.
   // Uses unique_ptr so binding addresses are stable and set_listener() can be called in add_media_source().
@@ -179,6 +180,8 @@ class SpeakerSourceMediaPlayer final : public Component, public media_player::Me
   Trigger<> *get_mute_trigger() { return &this->mute_trigger_; }
   Trigger<> *get_unmute_trigger() { return &this->unmute_trigger_; }
   Trigger<float> *get_volume_trigger() { return &this->volume_trigger_; }
+  // Hatch: fires with the URI whenever a play/enqueue request arrives, before it is queued.
+  Trigger<std::string> *get_play_uri_trigger() { return &this->play_uri_trigger_; }
 
   void set_playlist_delay_ms(uint8_t pipeline, uint32_t delay_ms);
 
@@ -247,6 +250,7 @@ class SpeakerSourceMediaPlayer final : public Component, public media_player::Me
   Trigger<> mute_trigger_;
   Trigger<> unmute_trigger_;
   Trigger<float> volume_trigger_;
+  Trigger<std::string> play_uri_trigger_;
 
   // The amount to change the volume on volume up/down commands
   float volume_increment_;
