@@ -8,55 +8,89 @@ stock `7.1.503`) instead responds at `0x62` and uses the MSA311 profile.
 On Rest+, the native I2C1 bus on GPIO13/23 is for power peripherals, not the
 accelerometer. Do not create a second I2C master on GPIO0/22.
 
-In your Rest+ config, add `hatch_accelerometer` alongside `hatch_expander` in
-the existing `external_components` list. Add the following block, replacing
-`io_exp` if your GPIO0/22 expander has a different ID:
+## Quick start
+
+Add `hatch_accelerometer` alongside `hatch_expander` in your existing
+`external_components` list. Add this block and replace `io_exp` with the ID of
+your GPIO0/22 expander if it differs:
 
 ```yaml
 hatch_accelerometer:
-  id: hatch_accel
   hatch_expander_id: io_exp
-  model: AUTO  # Or select DA213 or MSA311 explicitly.
-  allow_initialization: true
   tilt_angle:
     name: Tilt Angle
     filters:
       - delta: 2.0
-  upright:
-    name: Upright
-    disabled_by_default: true
 ```
 
-The default `model: AUTO` checks only `0x27` and `0x62` on the first
-poll. It selects a profile only if exactly one matches. If neither or both
-match, it logs a warning and leaves the sensor unconfigured without retrying
-discovery. An absent address can add a few startup bus errors; it is not
-polled afterward. Set `model: DA213` or `model: MSA311` to check only a known
-sensor. Both profiles require ID `0x13`, and the MSA311 profile
-rejects the `0xDE` value at register `0x11` used by stock
-firmware to distinguish the MSA321. It uses the `7.1.503` `0x62` setup
-and 12-bit samples, rather than the DA213’s 14-bit samples.
+This creates only Tilt Angle. The `delta` filter reduces updates from the
+reported ±1° jitter. Configured entities are enabled by default in Home
+Assistant. The component does not create entities you omit. To create an entity
+but leave it disabled by default in Home Assistant, set
+`disabled_by_default: true` on that entity.
 
-By default `allow_initialization` is false: the component only checks the
-configured sensor and does not write configuration or publish samples. With
-initialization enabled, it checks for a supported sensor before applying the
-stock reset and configuration, then samples at
-`update_interval` (default `1s`). In [PR #7's hardware report][pr7], Rest
-entities stayed unknown until initialization was enabled. Do not rely on the
-stock configuration surviving a cold boot.
+## Upright automation
 
-Tilt Angle is disabled by default in Home Assistant. Enable it there if you
-want the angle, or set `disabled_by_default: false` in YAML for new installs.
-The example's delta filter reduces updates from the reported ±1° jitter.
-Disabling the entity or filtering its updates does not stop I2C reads. To
-reduce reads, increase `update_interval`. To measure baseline expander errors,
-compare against a build without `hatch_accelerometer` on the same device.
+With `logger:` enabled, add `upright` under your existing
+`hatch_accelerometer` block, at the same level as `tilt_angle`. The automation
+logs when the Hatch returns upright:
 
-Optional diagnostic entity keys are `acceleration_x`, `acceleration_y`,
-`acceleration_z` (g), `tilt_angle` (degrees), `upright` and `not_upright`.
-Upright follows the stock Z-axis threshold (about −0.5 g). In a lambda, check
-`id(hatch_accel).valid()` before using `id(hatch_accel).is_upright()`. The
-component does not control indicator lights by itself.
+```yaml
+  upright:
+    name: Upright
+    on_press:
+      then:
+        - logger.log: "Hatch is upright"
+```
+
+ESPHome runs `on_press` when Upright changes from off to on. Upright follows
+the stock Z-axis threshold of about −0.5 g. Use `not_upright` for the inverse
+state. The component does not control indicator lights by itself.
+
+If you need to read the orientation in a lambda, set `id: hatch_accel` on
+`hatch_accelerometer` and check `id(hatch_accel).valid()` before calling
+`id(hatch_accel).is_upright()`.
+
+## XYZ diagnostics
+
+Add these entries under `hatch_accelerometer` to see acceleration along each
+axis in g. Compare the readings with the Hatch upright and tilted to see how
+its orientation changes the Z-axis reading.
+
+```yaml
+  acceleration_x:
+    name: Acceleration X
+  acceleration_y:
+    name: Acceleration Y
+  acceleration_z:
+    name: Acceleration Z
+```
+
+Disabling entities in Home Assistant or filtering their updates does not stop
+I2C reads. Increase `update_interval` to read less often. To measure baseline
+expander errors, compare against a build without `hatch_accelerometer` on the
+same device.
+
+## Detection and initialization
+
+The default `model: AUTO` checks only `0x27` and `0x62` on the first poll.
+It selects a profile only if exactly one matches. If neither or both match,
+it logs a warning and leaves the sensor unconfigured without retrying
+discovery. An absent address can add a few startup bus errors. The component
+does not poll that address again. Set `model: DA213` or `model: MSA311` to check
+only a known sensor. Both profiles require ID `0x13`. The MSA311 profile
+rejects `0xDE` at register `0x11`, which stock firmware uses to identify the
+MSA321. The MSA311 profile uses the stock `7.1.503` setup for `0x62` and reads
+12-bit samples. The DA213 profile reads 14-bit samples.
+
+`allow_initialization` defaults to `true`. The component checks for a supported
+sensor before it writes the stock reset and configuration. It then samples at
+`update_interval`, which defaults to `1s`. Set `allow_initialization: false` to
+probe only. Probe-only mode does not write configuration or publish samples.
+In [PR #7's hardware report][pr7], entities stayed unknown without
+initialization. Do not rely on the stock configuration surviving a cold boot.
+
+## Compile fixture
 
 The [compile fixture](../esphome/hatch-accelerometer-check.yaml) wires all six
 entities. It is not a hardware image; do not flash it.

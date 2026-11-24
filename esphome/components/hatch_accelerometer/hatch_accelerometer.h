@@ -44,7 +44,7 @@ class HatchAccelerometer : public PollingComponent {
   AccelerometerModel model_{AccelerometerModel::AUTO};
   bool auto_probe_done_{false};
   bool stopped_{false};
-  bool allow_initialization_{false};
+  bool allow_initialization_{true};
   bool setup_complete_{false};
   bool valid_{false};
 };

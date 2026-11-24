@@ -11,6 +11,7 @@ using hatch_expander::HatchExpander;
 static void test_da213_read_only_discovery() {
   HatchExpander bus;
   HatchAccelerometer accel;
+  accel.set_allow_initialization(false);
   accel.set_expander(&bus);
   accel.set_model(AccelerometerModel::DA213);
   accel.update();
@@ -105,6 +106,7 @@ static void test_da213_initialization_and_samples() {
 static void test_msa311_read_only_discovery() {
   HatchExpander bus;
   HatchAccelerometer accel;
+  accel.set_allow_initialization(false);
   accel.set_expander(&bus);
   accel.set_model(AccelerometerModel::MSA311);
   accel.update();
@@ -195,7 +197,6 @@ static void test_auto_initializes_unique_da213() {
   bus.msa311_id = 0x12;
   HatchAccelerometer accel;
   accel.set_expander(&bus);
-  accel.set_allow_initialization(true);
 
   accel.update();
   assert_auto_probe_reads(bus, false);
@@ -213,7 +214,6 @@ static void test_auto_initializes_unique_msa311() {
   bus.da213_id = 0x12;
   HatchAccelerometer accel;
   accel.set_expander(&bus);
-  accel.set_allow_initialization(true);
 
   accel.update();
   assert_auto_probe_reads(bus, true);
@@ -273,6 +273,7 @@ static void test_auto_read_only_discovery() {
   HatchExpander bus;
   bus.da213_id.reset();
   HatchAccelerometer accel;
+  accel.set_allow_initialization(false);
   accel.set_expander(&bus);
 
   accel.update();
