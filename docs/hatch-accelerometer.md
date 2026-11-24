@@ -3,11 +3,10 @@
 On a Hatch fitted with the [MiraMEMS DA213](hardware-map.md#accelerometer-da213),
 use the existing `hatch_expander` on stock **I2C0**: GPIO0 (SDA) and GPIO22
 (SCL). The expander is at `0x58`; the DA213 is at 7-bit address `0x27` and
-returns `0x13` in register `0x01`. Kewe’s Rest+ 2 (hardware `8.0.1`,
+returns `0x13` in register `0x01`. A tested Rest+ 2 (hardware `8.0.1`,
 stock `7.1.503`) instead responds at `0x62` and uses the MSA311 profile.
-On Rest+, the native I2C1 bus on GPIO13/23
-is for power peripherals, not the accelerometer. Do not create a second I2C
-master on GPIO0/22.
+On Rest+, the native I2C1 bus on GPIO13/23 is for power peripherals, not the
+accelerometer. Do not create a second I2C master on GPIO0/22.
 
 In your Rest+ config, add `hatch_accelerometer` alongside `hatch_expander` in
 the existing `external_components` list. Add the following block, replacing
@@ -17,6 +16,7 @@ the existing `external_components` list. Add the following block, replacing
 hatch_accelerometer:
   id: hatch_accel
   hatch_expander_id: io_exp
+  model: AUTO  # Or select DA213 or MSA311 explicitly.
   allow_initialization: true
   tilt_angle:
     name: Tilt Angle
@@ -27,10 +27,13 @@ hatch_accelerometer:
     disabled_by_default: true
 ```
 
-The default `model: DA213` preserves the `0x27` setup. For a board verified
-to use the `0x62` MSA311-compatible sensor, set `model: MSA311`; do not
-change the model based on a bus error alone. The MSA311 profile requires
-ID `0x13` and rejects the `0xDE` value at register `0x11` used by stock
+The default `model: AUTO` checks only `0x27` and `0x62` on the first
+poll. It selects a profile only if exactly one matches. If neither or both
+match, it logs a warning and leaves the sensor unconfigured without retrying
+discovery. An absent address can add a few startup bus errors; it is not
+polled afterward. Set `model: DA213` or `model: MSA311` to check only a known
+sensor. Both profiles require ID `0x13`, and the MSA311 profile
+rejects the `0xDE` value at register `0x11` used by stock
 firmware to distinguish the MSA321. It uses the `7.1.503` `0x62` setup
 and 12-bit samples, rather than the DA213’s 14-bit samples.
 
@@ -60,6 +63,8 @@ entities. It is not a hardware image; do not flash it.
 
 ```sh
 python -m esphome compile esphome/hatch-accelerometer-check.yaml
+python -m esphome -s accel_model DA213 compile esphome/hatch-accelerometer-check.yaml
+python -m esphome -s accel_model MSA311 compile esphome/hatch-accelerometer-check.yaml
 python -m pytest tests/test_hatch_accelerometer.py tests/test_hatch_expander_bus.py -q
 ```
 

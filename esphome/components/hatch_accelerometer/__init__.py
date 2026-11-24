@@ -17,13 +17,17 @@ ns = cg.esphome_ns.namespace("hatch_accelerometer")
 HatchAccelerometer = ns.class_("HatchAccelerometer", cg.PollingComponent)
 
 AccelerometerModel = ns.enum("AccelerometerModel", is_class=True)
-MODELS = {"DA213": AccelerometerModel.DA213, "MSA311": AccelerometerModel.MSA311}
+MODELS = {
+    "AUTO": AccelerometerModel.AUTO,
+    "DA213": AccelerometerModel.DA213,
+    "MSA311": AccelerometerModel.MSA311,
+}
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(HatchAccelerometer),
         cv.Required(CONF_HATCH_EXPANDER_ID): cv.use_id(HatchExpander),
-        cv.Optional(CONF_MODEL, default="DA213"): cv.enum(MODELS, upper=True),
+        cv.Optional(CONF_MODEL, default="AUTO"): cv.enum(MODELS, upper=True),
         cv.Optional(CONF_ALLOW_INITIALIZATION, default=False): cv.boolean,
         **{
             cv.Optional(key): sensor.sensor_schema(

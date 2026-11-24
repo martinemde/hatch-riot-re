@@ -8,7 +8,7 @@
 
 namespace esphome::hatch_accelerometer {
 
-enum class AccelerometerModel { DA213, MSA311 };
+enum class AccelerometerModel { AUTO, DA213, MSA311 };
 
 class HatchAccelerometer : public PollingComponent {
  public:
@@ -33,6 +33,7 @@ class HatchAccelerometer : public PollingComponent {
   }
 
  protected:
+  bool matches_model_(AccelerometerModel model);
   void invalidate_();
   hatch_expander::HatchExpander *expander_{nullptr};
   sensor::Sensor *axes_[3]{};
@@ -40,7 +41,8 @@ class HatchAccelerometer : public PollingComponent {
   binary_sensor::BinarySensor *upright_{nullptr};
   binary_sensor::BinarySensor *not_upright_{nullptr};
   Acceleration acceleration_{};
-  AccelerometerModel model_{AccelerometerModel::DA213};
+  AccelerometerModel model_{AccelerometerModel::AUTO};
+  bool auto_probe_done_{false};
   bool stopped_{false};
   bool allow_initialization_{false};
   bool setup_complete_{false};

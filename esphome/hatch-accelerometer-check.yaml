@@ -1,4 +1,6 @@
 # Compile-only fixture; do not flash.
+substitutions:
+  accel_model: AUTO
 esphome:
   name: hatch-accelerometer-check
 esp32:
@@ -20,6 +22,7 @@ hatch_expander:
 hatch_accelerometer:
   id: hatch_accel
   hatch_expander_id: io_exp
+  model: ${accel_model}
   allow_initialization: true
   acceleration_x:
     name: Acceleration X

@@ -13,23 +13,57 @@ static constexpr uint8_t REG_DATA = 0x02;
 static constexpr uint8_t REG_RESET = 0x00;
 static constexpr uint8_t REG_RANGE = 0x0F;
 
+static uint8_t address_for_model(AccelerometerModel model) {
+  return model == AccelerometerModel::MSA311 ? MSA311_ADDRESS : DA213_ADDRESS;
+}
+
+static const char *model_name(AccelerometerModel model) {
+  switch (model) {
+    case AccelerometerModel::DA213:
+      return "DA213";
+    case AccelerometerModel::MSA311:
+      return "MSA311";
+    default:
+      return "AUTO";
+  }
+}
+
+bool HatchAccelerometer::matches_model_(AccelerometerModel model) {
+  const uint8_t address = address_for_model(model);
+  uint8_t id;
+  if (!this->expander_->read_device_registers(address, REG_ID, &id, 1) || id != CHIP_ID)
+    return false;
+  if (model != AccelerometerModel::MSA311)
+    return true;
+  uint8_t mode;
+  // Stock 7.1.645 uses 0xDE here to distinguish the unsupported MSA321.
+  return this->expander_->read_device_registers(address, 0x11, &mode, 1) && mode != 0xDE;
+}
+
 void HatchAccelerometer::update() {
   if (this->stopped_ || this->expander_ == nullptr)
     return;
-  const bool msa311 = this->model_ == AccelerometerModel::MSA311;
-  const uint8_t address = msa311 ? MSA311_ADDRESS : DA213_ADDRESS;
-  const char *model_name = msa311 ? "MSA311" : "DA213";
-  if (!this->setup_complete_) {
-    uint8_t id;
-    if (!this->expander_->read_device_registers(address, REG_ID, &id, 1) || id != CHIP_ID) {
-      ESP_LOGV(TAG, "%s ID unavailable or unsupported", model_name);
+  bool just_matched = false;
+  if (this->model_ == AccelerometerModel::AUTO) {
+    if (this->auto_probe_done_)
+      return;
+    this->auto_probe_done_ = true;
+    const bool da213 = this->matches_model_(AccelerometerModel::DA213);
+    const bool msa311 = this->matches_model_(AccelerometerModel::MSA311);
+    if (da213 == msa311) {
+      ESP_LOGW(TAG, "Accelerometer auto-detection: %s; no sensor configured",
+               da213 ? "both profiles matched" : "no supported profile matched");
       return;
     }
-    if (msa311) {
-      uint8_t mode;
-      // Stock 7.1.645 uses 0xDE here to distinguish the unsupported MSA321.
-      if (!this->expander_->read_device_registers(address, 0x11, &mode, 1) || mode == 0xDE)
-        return;
+    this->model_ = da213 ? AccelerometerModel::DA213 : AccelerometerModel::MSA311;
+    just_matched = true;
+  }
+  const bool msa311 = this->model_ == AccelerometerModel::MSA311;
+  const uint8_t address = address_for_model(this->model_);
+  if (!this->setup_complete_) {
+    if (!just_matched && !this->matches_model_(this->model_)) {
+      ESP_LOGV(TAG, "%s unavailable or unsupported", model_name(this->model_));
+      return;
     }
     if (this->allow_initialization_) {
       static constexpr uint8_t reset = 0x24;
@@ -48,7 +82,7 @@ void HatchAccelerometer::update() {
       }
     }
     this->setup_complete_ = true;
-    ESP_LOGI(TAG, "%s detected at 0x%02X (ID 0x%02X)", model_name, address, id);
+    ESP_LOGI(TAG, "%s detected at 0x%02X (ID 0x%02X)", model_name(this->model_), address, CHIP_ID);
     return;  // On initialization, wait until the next poll for the first sample.
   }
   if (!this->allow_initialization_)
@@ -89,7 +123,7 @@ void HatchAccelerometer::invalidate_() {
 
 void HatchAccelerometer::dump_config() {
   ESP_LOGCONFIG(TAG, "Hatch %s via shared expander bus; initialization=%s",
-                this->model_ == AccelerometerModel::MSA311 ? "MSA311" : "DA213",
+                model_name(this->model_),
                 this->allow_initialization_ ? "enabled" : "disabled (read-only discovery)");
 }
 
