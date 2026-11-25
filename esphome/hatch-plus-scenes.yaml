@@ -1,18 +1,14 @@
-# Local favorites and full presets; included by the Rest+ package.
+# Scenes, stock sounds, and clock settings; included by the Rest+ package.
 hatch_scenes:
   id: scenes
   light_id: night_light
   media_player_id: player
-  presets:
-    stock_sound_id: stock_sound
-    loop_switch_id: loop_sound
-    clock_switch_id: show_clock
-    clock_light_id: clock_light
-    text_id: display_text
-    display_id: clock_display
+  display_id: clock_display
+  current_scene:
+    name: Current Scene
 
 select:
-  # These labels are stored in full presets. The original WAVs live on the stock SD card.
+  # The original WAVs live on the stock SD card.
   - platform: template
     id: stock_sound
     name: Stock Sound
@@ -54,7 +50,7 @@ select:
           if (x == "Twinkle") filename = "013_twinkle16.wav";
           if (x == "Rockabye") filename = "014_rockabye16.wav";
           if (filename.empty()) return;
-          // Start stock sounds looping; hatch_scenes restores the saved loop setting on recall.
+          // Stock sounds start looping.
           id(loop_sound).turn_on();
           id(player).make_call().set_media_url("hatch-library:///Rest_Sounds/wav/" + filename).perform();
 
@@ -115,77 +111,29 @@ script:
             id(clock_display).show_text("");
           }
 
-sensor:
-  - platform: template
-    name: Current Favorite
-    entity_category: diagnostic
-    icon: mdi:star
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(scenes).current_favorite();
-
 api:
   actions:
-    - action: store_preset
+    # Scenes by slot number (1-9).
+    - action: save_scene
       variables:
-        index: int
-        name: string
+        slot: int
       then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).store_preset(index, name);
-            error_message: Preset save failed; use slot 0-9 and check device log
-    - action: apply_preset
+        - hatch_scenes.save:
+            slot: !lambda return slot;
+    - action: load_scene
       variables:
-        index: int
+        slot: int
       then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).apply_preset(index);
-            error_message: Preset apply failed; use a saved slot 0-9 and check device log
-    - action: favorite_capture
+        - hatch_scenes.load: !lambda return slot;
+    - action: delete_scene
       variables:
-        index: int
+        slot: int
       then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).capture(index);
-            error_message: Favorite operation failed; check device log
-    - action: favorite_configure
-      variables:
-        index: int
-        uri: string
-        repeat: bool
+        - hatch_scenes.delete:
+            slot: !lambda return slot;
+    - action: next_scene
       then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).configure_favorite(index, uri, repeat);
-            error_message: Favorite operation failed; check device log
-    - action: favorite_play
-      variables:
-        index: int
+        - hatch_scenes.next: scenes
+    - action: previous_scene
       then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).play(index);
-            error_message: Favorite operation failed; check device log
-    - action: favorite_erase
-      variables:
-        index: int
-      then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).erase(index);
-            error_message: Favorite operation failed; check device log
-    - action: favorite_next
-      then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).next();
-            error_message: Favorite operation failed; check device log
-    - action: favorite_previous
-      then:
-        - api.respond:
-            success: !lambda |-
-              return id(scenes).previous();
-            error_message: Favorite operation failed; check device log
+        - hatch_scenes.previous: scenes

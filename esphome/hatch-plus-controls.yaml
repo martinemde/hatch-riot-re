@@ -1,5 +1,5 @@
 # Local controls for the Hatch Rest+ 2. The parent package supplies the expander,
-# light, player, and scenes (with presets for the night-light save/delete hold).
+# light, player, display, and scenes.
 substitutions:
   hatch_plus_hold_ms: "800"
   enable_local_button_actions: "true"
@@ -27,7 +27,6 @@ hatch_buttons:
           if (local_actions && gesture == "tap") id(scenes).next();
           id(hatch_touch_event).trigger(gesture);
         } else if (button == "bottom") {
-          if (local_actions && gesture == "tap") id(scenes).previous();
           id(hatch_bottom_event).trigger(gesture);
         } else if (button == "night_light") {
           if (local_actions && gesture == "tap") id(night_light).toggle().perform();
@@ -36,23 +35,31 @@ hatch_buttons:
   on_press:
     - lambda: |-
         if (!${enable_local_button_actions}) return;
-        if (button == "night_light") id(scenes).management_press();
+        if (button == "touch") id(hatch_ring_hold_preview).execute();
         else if (button == "volume_up") id(hatch_volume_up_repeat).execute();
         else if (button == "volume_down") id(hatch_volume_down_repeat).execute();
         else if (button == "brightness_up") id(hatch_brightness_up_repeat).execute();
         else if (button == "brightness_down") id(hatch_brightness_down_repeat).execute();
   on_release:
-    # Preserve release-time holds: touch stops, bottom only emits an event,
-    # and the scenes component handles the 5 s save / 10 s delete thresholds.
-    # Adjustment taps act on every short release, not after the click window.
+    # Holds act on release. Touch Ring: a hold turns the light and speaker off,
+    # 5 s saves a new scene, and 10 s deletes the current one. Adjustment taps
+    # act on every short release, not after the click window.
     - lambda: |-
         constexpr bool local_actions = ${enable_local_button_actions};
         const bool held = duration >= ${hatch_plus_hold_ms};
         if (button == "touch") {
-          if (held) {
-            if (local_actions) id(scenes).stop();
-            id(hatch_touch_event).trigger("hold");
+          if (local_actions) {
+            id(hatch_ring_hold_preview).stop();
+            if (duration >= 10000) {
+              id(scenes).remove();
+            } else if (duration >= 5000) {
+              id(scenes).save();
+            } else if (held) {
+              id(night_light).turn_off().perform();
+              id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
+            }
           }
+          if (held) id(hatch_touch_event).trigger("hold");
           return;
         }
         if (button == "bottom") {
@@ -60,7 +67,6 @@ hatch_buttons:
           return;
         }
         if (button == "night_light") {
-          if (local_actions) id(scenes).management_release(duration);
           if (held) id(hatch_night_light_event).trigger("hold");
           return;
         }
@@ -85,8 +91,10 @@ hatch_buttons:
   on_cancel:
     - lambda: |-
         if (!${enable_local_button_actions}) return;
-        if (button == "night_light") id(scenes).management_cancel();
-        else if (button == "volume_up") id(hatch_volume_up_repeat).stop();
+        if (button == "touch") {
+          id(hatch_ring_hold_preview).stop();
+          id(clock_display).clear_overlay();
+        } else if (button == "volume_up") id(hatch_volume_up_repeat).stop();
         else if (button == "volume_down") id(hatch_volume_down_repeat).stop();
         else if (button == "brightness_up") id(hatch_brightness_up_repeat).stop();
         else if (button == "brightness_down") id(hatch_brightness_down_repeat).stop();
@@ -240,6 +248,14 @@ binary_sensor:
       - lambda: id(hatch_plus_buttons).button_event("bottom", false);
 
 script:
+  # While the Touch Ring is held, show what letting go will do once it changes from "off" to a scene.
+  - id: hatch_ring_hold_preview
+    mode: restart
+    then:
+      - delay: 5s
+      - lambda: id(clock_display).show_text_overlay("SAV?", 0);
+      - delay: 5s
+      - lambda: id(clock_display).show_text_overlay("DEL?", 0);
   - id: hatch_adjustment_step
     parameters:
       control: string

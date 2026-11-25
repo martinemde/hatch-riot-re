@@ -48,7 +48,7 @@ and turn on **Enabled**.
 | Toddler Lock | Turn on to suppress physical button gestures and their local actions. Home Assistant can still control the device. |
 | Stock Sound | Select a sound from the stock SD card, or select **None** to stop playback. |
 | Loop Sound | Turn off to stop the selected sound after one play. Selecting a stock sound turns looping back on. |
-| Current Favorite | Read the current favorite slot in an automation or dashboard. |
+| Current Scene | Read the scene slot loaded or saved last (`1` to `9`), or `None`. |
 | Battery | Read the reported battery percentage. |
 | Power Source | Read `base`, `plug`, or `battery`. The base takes priority when both inputs are present. If the power status cannot be read, it reports `unknown`. |
 | External Power Present | Check whether the wired power input is detected. |
@@ -57,12 +57,12 @@ and turn on **Enabled**.
 | Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
 
 The ESPHome integration also exposes device actions in **Developer tools** >
-**Actions**. Search for `store_preset` or `apply_preset` to save or recall
-one of the ten full preset slots. Set `index` to `0` through `9` and give
-`store_preset` a `name`. A full preset saves the **Stock Sound** selection,
-not the active stream or playback state. Select **None** before saving a
-silent preset. The integration also exposes `send_text` for one-time scrolling
-text and `favorite_*` actions for managing or recalling favorites.
+**Actions**. `save_scene`, `load_scene`, and `delete_scene` take a `slot`
+from `1` to `9`. `next_scene` and `previous_scene` step through the saved
+slots. A scene saves the night light, the sound that is playing, Loop Sound, and
+the volume. The clock confirms each action, for example `SAV1` or `FAV1`. See
+[Scenes](hatch-scenes.md) for details. The integration also exposes `send_text`
+for one-time scrolling text.
 
 ### Add raw acceleration or Not Upright
 
@@ -94,9 +94,9 @@ Each physical control has a Home Assistant event entity. The event entity's
 
 | Event entity | Event types | Default local action |
 | --- | --- | --- |
-| Touch Ring | `tap`, `hold`, `double`, `triple` | Tap recalls the next saved preset. Hold stops the light and speaker on release. |
-| Bottom Button | `tap`, `hold`, `double`, `triple` | Tap recalls the previous saved preset. Power shutdown is separate. |
-| Night Light Button | `tap`, `hold`, `double`, `triple` | Tap toggles the light. Hold for 5 seconds to save on release, or for 10 seconds to preview deletion and delete on release. |
+| Touch Ring | `tap`, `hold`, `double`, `triple` | Tap loads the next scene. Hold to turn off the light and speaker, 5 seconds to save a new scene, or 10 seconds to delete the current scene. Holds act on release; the clock shows `SAV?` or `DEL?` first, even when it is turned off. |
+| Bottom Button | `tap`, `hold`, `double`, `triple` | None. Power shutdown is separate. |
+| Night Light Button | `tap`, `hold`, `double`, `triple` | Tap toggles the light. |
 | Volume Up Button, Volume Down Button | `tap`, `hold` | Tap steps the volume once. Hold repeats until release. |
 | Brightness Up Button, Brightness Down Button | `tap`, `hold` | Tap steps the brightness once. Hold repeats until release. |
 
@@ -118,8 +118,8 @@ substitutions:
 ```
 
 Validate and rebuild. All seven event entities remain available, but the
-buttons no longer adjust the light or volume, stop playback, or recall, save,
-or delete presets on their own. You can still use the entities and preset
+buttons no longer adjust the light or volume, stop playback, or load, save,
+or delete scenes on their own. You can still use the entities and scene
 actions from Home Assistant. **Toddler Lock** still suppresses gesture events.
 The setting does not change power-button shutdown or battery management.
 
@@ -173,14 +173,14 @@ ESPHome OTA for regular updates.
   buses, audio pipeline, and pinned component revisions.
 - [hatch-plus-controls.yaml](../esphome/hatch-plus-controls.yaml) connects each
   physical control to its local action and native event entity.
-- [hatch-plus-presets.yaml](../esphome/hatch-plus-presets.yaml) wires the local
-  preset store and its audio and clock settings into the same package.
+- [hatch-plus-scenes.yaml](../esphome/hatch-plus-scenes.yaml) wires the local
+  scenes, stock sounds, and clock settings into the same package.
 
-The preview pins the accelerometer/expander from [#7][accel-pr] and the local
-preset component from [#11][presets-pr]. Those components are reviewed separately;
+The preview pins the accelerometer/expander from [#7][accel-pr] and the scenes
+component (with its `speaker_source` change) from [#11][scenes-pr]. Those components are reviewed separately;
 this package does not change their code. Once those dependencies are upstream,
 select the package and components together using an upstream branch or release
 tag.
 
 [accel-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/7
-[presets-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/11
+[scenes-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/11
