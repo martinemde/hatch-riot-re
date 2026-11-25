@@ -185,6 +185,12 @@ class SpeakerSourceMediaPlayer final : public Component, public media_player::Me
 
   void set_playlist_delay_ms(uint8_t pipeline, uint32_t delay_ms);
 
+  // Hatch: the URI the media pipeline is playing from its own playlist. Empty while idle, and while a source with its
+  // own playlist (Sendspin) plays, since that URI can't start the stream again.
+  std::string playing_uri() const;
+  // Hatch: whether the media pipeline repeats one track (Loop Sound).
+  bool repeats_one() const { return this->pipelines_[MEDIA_PIPELINE].repeat_mode == REPEAT_ONE; }
+
  protected:
   // Callbacks from source bindings (pipeline index is captured at binding creation time)
   size_t handle_media_output_(uint8_t pipeline, media_source::MediaSource *source, const uint8_t *data, size_t length,

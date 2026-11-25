@@ -1,0 +1,72 @@
+# The Rest config with hatch_scenes added: Home Assistant actions for numbered slots, and buttons for the rest.
+#
+# Flash ONLY after ../scripts/backup.sh has made and verified a full-flash backup.
+
+substitutions:
+  name: hatch-rest
+  friendly_name: Hatch Rest
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_expander, hatch_display, hatch_status_led, hatch_scenes, sd_cache, speaker_source]
+
+packages:
+  hatch_rest: !include hatch-rest-base.yaml
+
+hatch_scenes:
+  id: scenes
+  light_id: night_light
+  media_player_id: player
+  display_id: clock_display
+
+api:
+  actions:
+    - action: save_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.save:
+            slot: !lambda return slot;
+    - action: load_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.load: !lambda return slot;
+    - action: delete_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.delete:
+            slot: !lambda return slot;
+    - action: next_scene
+      then:
+        - hatch_scenes.next:
+    - action: previous_scene
+      then:
+        - hatch_scenes.previous:
+
+# One press each, confirmed on the clock (SAV1, FAV1, DEL1, ...).
+button:
+  - platform: template
+    name: Save Scene
+    icon: mdi:content-save
+    on_press:
+      - hatch_scenes.save: scenes
+  - platform: template
+    name: Next Scene
+    icon: mdi:skip-next
+    on_press:
+      - hatch_scenes.next: scenes
+  - platform: template
+    name: Previous Scene
+    icon: mdi:skip-previous
+    on_press:
+      - hatch_scenes.previous: scenes
+  - platform: template
+    name: Delete Scene
+    icon: mdi:delete
+    entity_category: config
+    on_press:
+      - hatch_scenes.delete: scenes

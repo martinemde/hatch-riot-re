@@ -45,6 +45,8 @@ jobs:
         run: esphome compile esphome/hatch-plus-power-compile.yaml
       - name: Compile standalone shared button classifier (never flash)
         run: esphome compile esphome/hatch-buttons-check.yaml
+      - name: Compile Rest with scenes
+        run: esphome compile esphome/hatch-scenes-check.yaml
       # Deliberately do not publish this binary: it contains CI-only credentials.
       - name: Remove temporary credentials
         if: always()
