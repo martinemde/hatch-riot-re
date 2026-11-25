@@ -21,6 +21,7 @@ class HatchDisplay : public Component, public uart::UARTDevice {
   void print(const std::string &text);
   /// Show text (as print()) with the colon off.
   void show_text(const std::string &text);
+  /// Overlays light a display that is off (brightness 15) at its dimmest while they show.
   /// Show static text over the latest base content. A zero duration holds it until replaced or cleared.
   void show_text_overlay(const std::string &text, uint32_t duration_ms = 3000);
   void clear_overlay() { if (this->overlay_active_) this->finish_overlay_(); }
@@ -52,7 +53,9 @@ class HatchDisplay : public Component, public uart::UARTDevice {
   static void set_scroll_frame_(ScrollState &scroll, uint8_t *output);
   /// Return false when a one-shot has finished; advance at most one frame per call.
   static bool advance_scroll_(ScrollState &scroll, uint8_t *output, uint32_t now, bool repeat);
+  void start_overlay_();
   void finish_overlay_();
+  uint8_t shown_brightness_() const;
   void send_digits_() { this->digits_dirty_ = true; }
 
   uint8_t segs_[4]{0, 0, 0, 0};

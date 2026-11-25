@@ -31,6 +31,7 @@ static const uint8_t FONT[95] = {
 // Brightness bytes for level 0..15 (stock table at 0x3f432e0c). Level 0 is brightest, 15 is off.
 static const uint8_t BRIGHTNESS[16] = {0xfe, 0x7e, 0xbe, 0x3e, 0xde, 0x5e, 0x9e, 0x1e,
                                        0xee, 0x6e, 0xae, 0x2e, 0xce, 0x4e, 0x8e, 0x0e};
+static const uint8_t LEVEL_DIMMEST = 14, LEVEL_OFF = 15;
 
 static uint8_t encode(char c) { return (c >= 0x20 && c <= 0x7e) ? FONT[c - 0x20] : 0x00; }
 
@@ -62,8 +63,10 @@ void HatchDisplay::loop() {
     return;
   if (now - this->last_frame_ms_ < FRAME_GAP_MS)
     return;
-  // Digits first, so the display is blanked before its first brightness frame lights it at boot.
-  if (send_digits) {
+  // Going dark is sent before new digits and lighting up after them, so the display never flashes digits it
+  // shouldn't show (at boot, or as an overlay on a clock that is off ends).
+  const uint8_t level = this->shown_brightness_();
+  if (send_digits && !(this->brightness_dirty_ && level == LEVEL_OFF)) {
     const uint8_t *segs = this->overlay_active_ ? this->overlay_segs_ : this->segs_;
     uint8_t f[6] = {FRAME_DIGITS, segs[0], segs[1], segs[2], segs[3],
                     uint8_t(this->overlay_active_ ? 0 : (this->misc_ & 0x07))};
@@ -79,7 +82,7 @@ void HatchDisplay::loop() {
     }
   } else {
     this->brightness_dirty_ = false;
-    uint8_t f[2] = {FRAME_BRIGHTNESS, BRIGHTNESS[this->brightness_]};
+    uint8_t f[2] = {FRAME_BRIGHTNESS, BRIGHTNESS[level]};
     this->write_array(f, sizeof(f));
   }
   this->flush();
@@ -150,12 +153,26 @@ bool HatchDisplay::advance_scroll_(ScrollState &scroll, uint8_t *output, uint32_
 
 void HatchDisplay::show_scrolling_text_once(const std::string &text) {
   this->init_scroll_(text, this->overlay_scroll_, this->overlay_segs_);
-  this->overlay_active_ = true;
+  this->start_overlay_();
   this->overlay_scrolling_ = true;
+}
+
+// An overlay answers something just done (a button, a Home Assistant message), so a clock that is off shows it at
+// its dimmest.
+uint8_t HatchDisplay::shown_brightness_() const {
+  return this->overlay_active_ && this->brightness_ == LEVEL_OFF ? LEVEL_DIMMEST : this->brightness_;
+}
+
+void HatchDisplay::start_overlay_() {
+  if (!this->overlay_active_ && this->brightness_ == LEVEL_OFF)
+    this->brightness_dirty_ = true;
+  this->overlay_active_ = true;
   this->overlay_dirty_ = true;
 }
 
 void HatchDisplay::finish_overlay_() {
+  if (this->brightness_ == LEVEL_OFF)
+    this->brightness_dirty_ = true;
   this->overlay_active_ = false;
   this->overlay_scrolling_ = false;
   this->overlay_dirty_ = false;
@@ -171,8 +188,7 @@ void HatchDisplay::show_text_overlay(const std::string &text, uint32_t duration_
   this->overlay_scrolling_ = false;
   this->overlay_started_ms_ = millis();
   this->overlay_duration_ms_ = duration_ms;
-  this->overlay_active_ = true;
-  this->overlay_dirty_ = true;
+  this->start_overlay_();
 }
 
 void HatchDisplay::set_segs_(const std::string &text) {
@@ -208,7 +224,7 @@ void HatchDisplay::set_colon(bool on) {
 }
 
 void HatchDisplay::set_brightness(uint8_t level) {
-  this->brightness_ = level > 15 ? 15 : level;
+  this->brightness_ = level > LEVEL_OFF ? LEVEL_OFF : level;
   this->brightness_dirty_ = true;
 }
 
