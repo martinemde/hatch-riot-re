@@ -1,28 +1,8 @@
-# Hatch Rest+ 2nd gen (HBRESTPLUS2 / RIoT+). The node config owns credentials.
+# Hatch Rest+ 2nd gen (HBRESTPLUS2 / RIoT+). The node config owns credentials and provides the components
+# (`external_components`): hatch-plus-example.yaml from this checkout, hatch-plus-builder.yaml from GitHub.
 packages:
   controls: !include hatch-plus-controls.yaml
   scenes: !include hatch-plus-scenes.yaml
-
-external_components:
-  - source:
-      type: git
-      url: https://github.com/w1ll1am23/hatch-riot-re
-      ref: 6936266e292522c9a95ba9be11a3a7db70d32449
-      path: esphome/components
-    components: [hatch_buttons, hatch_display, hatch_plus_power, sd_cache]
-  # Keep these on their own review branches until #7 and #11 are upstream.
-  - source:
-      type: git
-      url: https://github.com/martinemde/hatch-riot-re
-      ref: 15b815978de0b014944c7200d6f01a0baa498603
-      path: esphome/components
-    components: [hatch_accelerometer, hatch_expander]
-  - source:
-      type: git
-      url: https://github.com/martinemde/hatch-riot-re
-      ref: b1b0800eff7d6c12a8c649f842ff686ed4f3b5cc
-      path: esphome/components
-    components: [hatch_scenes, speaker_source]
 
 esphome:
   name: ${name}

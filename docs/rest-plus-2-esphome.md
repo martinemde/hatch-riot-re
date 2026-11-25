@@ -10,9 +10,9 @@ Use this package only for **HBRESTPLUS2** (RIoT+). For HBREST2 (RIoT), use
    firmware, keep its existing node name and encryption key.
 2. Create a device and replace its YAML with
    [hatch-plus-builder.yaml](../esphome/hatch-plus-builder.yaml). Set the name
-   and friendly name. The starter tracks the current preview branch.
-3. Use **Validate**. The package provides the board wiring, audio sources, button
-   behavior, and component versions. Do not substitute Rest firmware for a
+   and friendly name. The starter follows `main`.
+3. Use **Validate**. The starter takes the package (board wiring, audio sources,
+   button behavior) and its components from `main`. Do not substitute Rest firmware for a
    Rest+ package.
 
 For a local build, use ESPHome 2026.10.0 and
@@ -170,17 +170,12 @@ ESPHome OTA for regular updates.
 ## Package layout
 
 - [hatch-plus-base.yaml](../esphome/hatch-plus-base.yaml) holds the fixed wiring,
-  buses, audio pipeline, and pinned component revisions.
+  buses, and audio pipeline.
 - [hatch-plus-controls.yaml](../esphome/hatch-plus-controls.yaml) connects each
   physical control to its local action and native event entity.
 - [hatch-plus-scenes.yaml](../esphome/hatch-plus-scenes.yaml) wires the local
   scenes, stock sounds, and clock settings into the same package.
 
-The preview pins the accelerometer/expander from [#7][accel-pr] and the scenes
-component (with its `speaker_source` change) from [#11][scenes-pr]. Those components are reviewed separately;
-this package does not change their code. Once those dependencies are upstream,
-select the package and components together using an upstream branch or release
-tag.
-
-[accel-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/7
-[scenes-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/11
+The device YAML provides the components. The local example builds them from
+this checkout. The Builder starter takes the package and the components from
+`main` of this repository. To stay on a release, change both refs to its tag.
