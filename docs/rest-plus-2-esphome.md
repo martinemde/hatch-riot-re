@@ -50,7 +50,9 @@ and turn on **Enabled**.
 | Loop Sound | Turn off to stop the selected sound after one play. Selecting a stock sound turns looping back on. |
 | Current Favorite | Read the current favorite slot in an automation or dashboard. |
 | Battery | Read the reported battery percentage. |
-| External Power Present | Check whether the unit detects external power. |
+| Power Source | Read `base`, `plug`, or `battery`. The base takes priority when both inputs are present. If the power status cannot be read, it reports `unknown`. |
+| External Power Present | Check whether the wired power input is detected. |
+| Wireless Voltage Present | Check whether voltage from the wireless charging base is detected. |
 | Tilt Angle | Read the angle in degrees. The package reports changes of at least 2°. |
 | Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
 

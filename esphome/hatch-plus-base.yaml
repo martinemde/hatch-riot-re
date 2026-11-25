@@ -248,4 +248,20 @@ hatch_plus_power:
     name: Battery
     entity_category: ""
   external_power_present:
+    id: hatch_plug_power
     name: External Power Present
+  wireless_voltage_present:
+    id: hatch_wireless_power
+    name: Wireless Voltage Present
+
+text_sensor:
+  - platform: template
+    name: Power Source
+    icon: mdi:power-plug
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: |-
+      if (!id(hatch_wireless_power).has_state() || !id(hatch_plug_power).has_state()) return {"unknown"};
+      if (id(hatch_wireless_power).state) return {"base"};
+      if (id(hatch_plug_power).state) return {"plug"};
+      return {"battery"};
