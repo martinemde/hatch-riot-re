@@ -16,8 +16,8 @@ Every action confirms itself on the clock for 3 seconds:
 
 ## Setup
 
-Add `hatch_scenes` to `external_components`, then point it at the light, speaker and
-clock:
+The Rest config ([`hatch-rest-base.yaml`](../esphome/hatch-rest-base.yaml)) already
+includes it:
 
 ```yaml
 hatch_scenes:
@@ -27,8 +27,8 @@ hatch_scenes:
   display_id: clock_display
 ```
 
-[`esphome/hatch-scenes-check.yaml`](../esphome/hatch-scenes-check.yaml) is the Rest
-config with this added, plus the Home Assistant actions and buttons below.
+It also adds Home Assistant actions: `save_scene`, `load_scene` and `delete_scene`
+take a `slot`, and `next_scene` and `previous_scene` take none.
 
 ## Actions
 
@@ -44,27 +44,8 @@ config with this added, plus the Home Assistant actions and buttons below.
     slot: 3
 ```
 
-`slot` takes a lambda, so a Home Assistant action can pass it through:
-
-```yaml
-api:
-  actions:
-    - action: load_scene
-      variables:
-        slot: int
-      then:
-        - hatch_scenes.load: !lambda return slot;
-```
-
-From a button, each press does one thing:
-
-```yaml
-button:
-  - platform: template
-    name: Next Scene
-    on_press:
-      - hatch_scenes.next: scenes
-```
+`slot` also takes a lambda (`slot: !lambda return slot;`). This is how the Home Assistant
+actions pass it through.
 
 For the physical buttons, map gestures from [`hatch_buttons`](hatch-buttons.md), for
 example:

@@ -5,8 +5,8 @@
 #
 # Flash ONLY after ../scripts/backup.sh has made and verified a full-flash backup.
 #
-# This is the shared base config. It needs the local components hatch_expander, hatch_display and hatch_status_led,
-# which the top-level file provides via `external_components`:
+# This is the shared base config. It needs the local components hatch_expander, hatch_display, hatch_scenes and
+# hatch_status_led, which the top-level file provides via `external_components`:
 #   hatch-rest.yaml          - local development (components from ./components)
 #   hatch-rest-builder.yaml  - ESPHome Builder add-on (config and components from GitHub)
 
@@ -64,6 +64,30 @@ api:
         message: string
       then:
         - lambda: id(clock_display).show_scrolling_text_once(message);
+    # Scenes by slot number (1-9); see ../docs/hatch-scenes.md.
+    - action: save_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.save:
+            slot: !lambda return slot;
+    - action: load_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.load: !lambda return slot;
+    - action: delete_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.delete:
+            slot: !lambda return slot;
+    - action: next_scene
+      then:
+        - hatch_scenes.next: scenes
+    - action: previous_scene
+      then:
+        - hatch_scenes.previous: scenes
 
 ota:
   - platform: esphome
@@ -496,6 +520,13 @@ hatch_display:
   id: clock_display
   uart_id: disp_uart
   brightness: 4
+
+# Saved night light + sound in slots 1-9, confirmed on the clock (SAV1, FAV1, DEL1). See ../docs/hatch-scenes.md.
+hatch_scenes:
+  id: scenes
+  light_id: night_light
+  media_player_id: player
+  display_id: clock_display
 
 number:
   - platform: template
