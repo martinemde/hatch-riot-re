@@ -1,0 +1,304 @@
+# Local controls for the Hatch Rest+ 2. The parent package supplies the expander,
+# light, player, and scenes (with presets for the night-light save/delete hold).
+substitutions:
+  hatch_plus_hold_ms: "800"
+  enable_local_button_actions: "true"
+
+hatch_buttons:
+  id: hatch_plus_buttons
+  hold_time: ${hatch_plus_hold_ms}ms
+  multi_click_time: 350ms
+  buttons:
+    - name: touch
+    - name: bottom
+    - name: night_light
+    - name: volume_up
+    - name: volume_down
+    - name: brightness_up
+    - name: brightness_down
+  on_button:
+    # The classifier recognizes four gestures for all inputs and emits hold at
+    # the threshold. Use its click grouping only for Touch Ring, Bottom, and
+    # Night Light. Double/triple notify listeners but have no local action.
+    - lambda: |-
+        constexpr bool local_actions = ${enable_local_button_actions};
+        if (gesture == "hold") return;
+        if (button == "touch") {
+          if (local_actions && gesture == "tap") id(scenes).next();
+          id(hatch_touch_event).trigger(gesture);
+        } else if (button == "bottom") {
+          if (local_actions && gesture == "tap") id(scenes).previous();
+          id(hatch_bottom_event).trigger(gesture);
+        } else if (button == "night_light") {
+          if (local_actions && gesture == "tap") id(night_light).toggle().perform();
+          id(hatch_night_light_event).trigger(gesture);
+        }
+  on_press:
+    - lambda: |-
+        if (!${enable_local_button_actions}) return;
+        if (button == "night_light") id(scenes).management_press();
+        else if (button == "volume_up") id(hatch_volume_up_repeat).execute();
+        else if (button == "volume_down") id(hatch_volume_down_repeat).execute();
+        else if (button == "brightness_up") id(hatch_brightness_up_repeat).execute();
+        else if (button == "brightness_down") id(hatch_brightness_down_repeat).execute();
+  on_release:
+    # Preserve release-time holds: touch stops, bottom only emits an event,
+    # and the scenes component handles the 5 s save / 10 s delete thresholds.
+    # Adjustment taps act on every short release, not after the click window.
+    - lambda: |-
+        constexpr bool local_actions = ${enable_local_button_actions};
+        const bool held = duration >= ${hatch_plus_hold_ms};
+        if (button == "touch") {
+          if (held) {
+            if (local_actions) id(scenes).stop();
+            id(hatch_touch_event).trigger("hold");
+          }
+          return;
+        }
+        if (button == "bottom") {
+          if (held) id(hatch_bottom_event).trigger("hold");
+          return;
+        }
+        if (button == "night_light") {
+          if (local_actions) id(scenes).management_release(duration);
+          if (held) id(hatch_night_light_event).trigger("hold");
+          return;
+        }
+
+        event::Event *adjustment_event = nullptr;
+        if (button == "volume_up") {
+          if (local_actions) id(hatch_volume_up_repeat).stop();
+          adjustment_event = id(hatch_volume_up_event);
+        } else if (button == "volume_down") {
+          if (local_actions) id(hatch_volume_down_repeat).stop();
+          adjustment_event = id(hatch_volume_down_event);
+        } else if (button == "brightness_up") {
+          if (local_actions) id(hatch_brightness_up_repeat).stop();
+          adjustment_event = id(hatch_brightness_up_event);
+        } else if (button == "brightness_down") {
+          if (local_actions) id(hatch_brightness_down_repeat).stop();
+          adjustment_event = id(hatch_brightness_down_event);
+        }
+        if (adjustment_event == nullptr) return;
+        if (local_actions && !held) id(hatch_adjustment_step).execute(button);
+        adjustment_event->trigger(held ? "hold" : "tap");
+  on_cancel:
+    - lambda: |-
+        if (!${enable_local_button_actions}) return;
+        if (button == "night_light") id(scenes).management_cancel();
+        else if (button == "volume_up") id(hatch_volume_up_repeat).stop();
+        else if (button == "volume_down") id(hatch_volume_down_repeat).stop();
+        else if (button == "brightness_up") id(hatch_brightness_up_repeat).stop();
+        else if (button == "brightness_down") id(hatch_brightness_down_repeat).stop();
+
+switch:
+  - platform: template
+    id: toddler_lock
+    name: Toddler Lock
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: id(hatch_plus_buttons).set_child_lock(true);
+    on_turn_off:
+      - lambda: id(hatch_plus_buttons).set_child_lock(false);
+
+event:
+  - platform: template
+    id: hatch_touch_event
+    name: Touch Ring
+    device_class: button
+    icon: mdi:gesture-tap
+    event_types: [tap, hold, double, triple]
+  - platform: template
+    id: hatch_bottom_event
+    name: Bottom Button
+    device_class: button
+    icon: mdi:gesture-tap-button
+    event_types: [tap, hold, double, triple]
+  - platform: template
+    id: hatch_night_light_event
+    name: Night Light Button
+    device_class: button
+    icon: mdi:lightbulb-night
+    event_types: [tap, hold, double, triple]
+  - platform: template
+    id: hatch_volume_up_event
+    name: Volume Up Button
+    device_class: button
+    icon: mdi:volume-plus
+    event_types: [tap, hold]
+  - platform: template
+    id: hatch_volume_down_event
+    name: Volume Down Button
+    device_class: button
+    icon: mdi:volume-minus
+    event_types: [tap, hold]
+  - platform: template
+    id: hatch_brightness_up_event
+    name: Brightness Up Button
+    device_class: button
+    icon: mdi:brightness-7
+    event_types: [tap, hold]
+  - platform: template
+    id: hatch_brightness_down_event
+    name: Brightness Down Button
+    device_class: button
+    icon: mdi:brightness-5
+    event_types: [tap, hold]
+
+binary_sensor:
+  - platform: gpio
+    id: btn_volume_up
+    internal: true
+    pin:
+      hatch_expander: io_exp
+      number: 0
+      mode: input
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("volume_up", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("volume_up", false);
+  - platform: gpio
+    id: btn_brightness_up
+    internal: true
+    pin:
+      hatch_expander: io_exp
+      number: 1
+      mode: input
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("brightness_up", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("brightness_up", false);
+  - platform: gpio
+    id: btn_night_light
+    internal: true
+    pin:
+      hatch_expander: io_exp
+      number: 2
+      mode: input
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("night_light", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("night_light", false);
+  - platform: gpio
+    id: btn_volume_down
+    internal: true
+    pin:
+      hatch_expander: io_exp
+      number: 3
+      mode: input
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("volume_down", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("volume_down", false);
+  - platform: gpio
+    id: btn_brightness_down
+    internal: true
+    pin:
+      hatch_expander: io_exp
+      number: 4
+      mode: input
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("brightness_down", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("brightness_down", false);
+  - platform: gpio
+    id: touch
+    internal: true
+    pin: GPIO33
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 100ms
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("touch", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("touch", false);
+  - platform: gpio
+    id: btn_bottom
+    internal: true
+    pin:
+      number: GPIO36
+      inverted: true
+    on_press:
+      - lambda: id(hatch_plus_buttons).button_event("bottom", true);
+    on_release:
+      - lambda: id(hatch_plus_buttons).button_event("bottom", false);
+
+script:
+  - id: hatch_adjustment_step
+    parameters:
+      control: string
+    then:
+      - lambda: |-
+          if (control == "volume_up" || control == "volume_down") {
+            id(player).make_call()
+                .set_command(control == "volume_up" ? media_player::MEDIA_PLAYER_COMMAND_VOLUME_UP
+                                                     : media_player::MEDIA_PLAYER_COMMAND_VOLUME_DOWN)
+                .perform();
+          } else {
+            const float step = control == "brightness_up" ? 0.1f : -0.1f;
+            const float brightness = clamp(id(night_light).remote_values.get_brightness() + step, 0.0f, 1.0f);
+            id(night_light).make_call().set_state(brightness > 0.0f).set_brightness(brightness)
+                .set_transition_length(0).perform();
+          }
+  # Separate scripts let each physical release or lock cancellation stop just
+  # that button's repeat, including when two controls are held at once.
+  - id: hatch_volume_up_repeat
+    then:
+      - delay: ${hatch_plus_hold_ms}ms
+      - while:
+          condition:
+            binary_sensor.is_on: btn_volume_up
+          then:
+            - script.execute:
+                id: hatch_adjustment_step
+                control: volume_up
+            - delay: 150ms
+  - id: hatch_volume_down_repeat
+    then:
+      - delay: ${hatch_plus_hold_ms}ms
+      - while:
+          condition:
+            binary_sensor.is_on: btn_volume_down
+          then:
+            - script.execute:
+                id: hatch_adjustment_step
+                control: volume_down
+            - delay: 150ms
+  - id: hatch_brightness_up_repeat
+    then:
+      - delay: ${hatch_plus_hold_ms}ms
+      - while:
+          condition:
+            binary_sensor.is_on: btn_brightness_up
+          then:
+            - script.execute:
+                id: hatch_adjustment_step
+                control: brightness_up
+            - delay: 150ms
+  - id: hatch_brightness_down_repeat
+    then:
+      - delay: ${hatch_plus_hold_ms}ms
+      - while:
+          condition:
+            binary_sensor.is_on: btn_brightness_down
+          then:
+            - script.execute:
+                id: hatch_adjustment_step
+                control: brightness_down
+            - delay: 150ms

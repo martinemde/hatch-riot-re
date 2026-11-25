@@ -28,13 +28,19 @@ The hardware map was worked out by **static analysis** of the stock firmware (Ca
 pin by pin on the device with a diagnostic [probe firmware](docs/probe-firmware.md) and a
 [teardown](docs/teardown.md). See [docs/open-questions.md](docs/open-questions.md) for what's still open.
 
+## Hatch Rest+ 2nd gen
+
+The [Rest+ ESPHome package and Builder setup](docs/rest-plus-2-esphome.md) are
+for HBRESTPLUS2 (RIoT+), not the Rest configuration above. The package provides
+local presets and Home Assistant button events. Experimental power control is
+disabled by default.
+
 ## Local Rest+ BLE flasher
 
 [`flasher/`](flasher/README.md) is an independent experimental local tool for
 stock Wi-Fi setup and application-only first installs on **Rest+ 2nd gen
 (HBRESTPLUS2)**. Tested stock routes are 7.1.645 (WSUP) and 7.1.503 (state.rF).
-It includes a localhost dashboard, Python server and offline tests; it does not
-include a Rest+ firmware configuration or change the Rest firmware's support.
+It includes a localhost dashboard, Python server, and offline tests.
 **Do not flash the Rest YAML onto Rest+.** Other models, including Rest, are not
 verified with this flasher. Read its safety and recovery limits before use.
 

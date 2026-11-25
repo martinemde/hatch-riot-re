@@ -2,6 +2,8 @@
 
 - **`hatch-rest*.yaml`** — the working stock replacement for the Hatch Rest 2nd gen (RIoT). See
   [../docs/esphome-plan.md](../docs/esphome-plan.md#replacement-config) for what it does.
+- **[`hatch-plus-example.yaml`](hatch-plus-example.yaml)** — Rest+ 2nd gen (RIoT+). See the
+  [Rest+ guide](../docs/rest-plus-2-esphome.md) for Builder setup, local controls, and experimental power.
 - **`hatch-riot-probe.yaml`** — a read-mostly diagnostic firmware for confirming the hardware map. Read
   [../docs/probe-firmware.md](../docs/probe-firmware.md) (safety model and test plan) **before flashing it**.
 
@@ -10,6 +12,8 @@
 | `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache, repeat. Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
+| `hatch-plus-builder.yaml` | Rest+ 2nd gen: a short ESPHome Builder config that loads the version-pinned package |
+| `hatch-plus-example.yaml` | Rest+ 2nd gen: the same package from the local checkout |
 | `hatch-riot-probe.yaml` | probe (diagnostic) config |
 | `bluetooth-proxy.yaml` | optional add-on: Home Assistant Bluetooth proxy (see [below](#bluetooth)) |
 | `riot-plus.yaml` | adds I2C bus 1 (scan only) for RIoT+ boards |
@@ -39,7 +43,9 @@ Flash only after `../scripts/backup.sh` succeeds.
 
 ## ESPHome Builder add-on
 
-To manage the replacement firmware from the Home Assistant **ESPHome Builder** add-on, use
+For Rest+ 2nd gen (HBRESTPLUS2), use the [Rest+ Builder setup](../docs/rest-plus-2-esphome.md#esphome-builder-setup).
+
+For Rest 2nd gen (HBREST2), use
 [`hatch-rest-builder.yaml`](hatch-rest-builder.yaml). It pulls both the config (`hatch-rest-base.yaml`, as a remote
 package) and the custom components from this GitHub repo, so the Builder only holds this short file.
 

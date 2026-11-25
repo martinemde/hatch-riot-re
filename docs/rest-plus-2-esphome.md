@@ -1,0 +1,189 @@
+# ESPHome on Hatch Rest+ 2nd gen
+
+Use this package only for **HBRESTPLUS2** (RIoT+). For HBREST2 (RIoT), use
+[the Rest configuration](../esphome/hatch-rest.yaml).
+
+## ESPHome Builder setup
+
+1. In ESPHome Builder, add `wifi_ssid`, `wifi_password`, `fallback_ap_password`,
+   and `api_encryption_key` to **Secrets**. For a unit already running this
+   firmware, keep its existing node name and encryption key.
+2. Create a device and replace its YAML with
+   [hatch-plus-builder.yaml](../esphome/hatch-plus-builder.yaml). Set the name
+   and friendly name. Read the power notes below before changing the power flag.
+3. Use **Validate**. The package provides the board wiring, audio sources, button
+   behavior, and component versions. Change the package ref when you want to
+   try a different version. Do not substitute Rest firmware for a Rest+ package.
+
+For a local build, use ESPHome 2026.10.0 and
+[hatch-plus-example.yaml](../esphome/hatch-plus-example.yaml). Copy
+`esphome/secrets.yaml.example` to `esphome/secrets.yaml` and fill in your local
+values. Run `esphome compile esphome/hatch-plus-example.yaml` from the repository
+root. Never flash an example compiled with disposable credentials.
+
+## Experimental power control
+
+Leave `enable_experimental_power_control: "false"` for diagnostics-only use.
+In this mode the package does not turn on the stock night light or amplifier
+power rails, manage charging, or perform low-battery shutdown. **External Power
+Present** remains available as a diagnostic. Run diagnostics under supervision
+with external power.
+
+Setting the flag to `"true"` opts into the experimental stock load controller,
+battery reporting, charging, and shutdown logic. Charging, thermal protection,
+and battery shutdown have not been safety-validated. Do not use this as an
+unattended battery or charging system. Leave GreenPAK NVM programming off. The
+power component must be the only writer for the amplifier and night-light rails.
+The shutdown sequence has not been verified while controls or presets are active.
+
+## Home Assistant controls
+
+Open your Hatch under **Settings** > **Devices & services** > **ESPHome**.
+The package creates the following entities. You do not need to add them to
+ESPHome YAML. If you disabled an entity in Home Assistant, open its settings
+and turn on **Enabled**.
+
+| Entity | How to use it |
+| --- | --- |
+| Night Light | Set the RGB color, white level, or brightness. The physical light rail requires experimental power control. |
+| Speaker | Play audio or set the volume. Select stock sounds separately in **Stock Sound**. The amplifier rail requires experimental power control. |
+| Clock Display | Set display brightness or turn the display off. |
+| Show Clock | Turn on to show the time from Home Assistant. Turn off to show **Display Text** instead. |
+| Display Text | Enter scrolling text to show while **Show Clock** is off. |
+| Toddler Lock | Turn on to suppress physical button gestures and their local actions. Home Assistant can still control the device. |
+| Stock Sound | Select a sound from the stock SD card, or select **None** to stop playback. |
+| Loop Sound | Turn off to stop the selected sound after one play. Selecting a stock sound turns looping back on. |
+| Current Favorite | Read the current favorite slot in an automation or dashboard. |
+| Battery | Read the battery percentage in experimental power control mode. |
+| External Power Present | Check whether the unit detects external power. This diagnostic also works with experimental power control off. |
+| Tilt Angle | Read the angle in degrees. The package reports changes of at least 2°. |
+| Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
+
+The ESPHome integration also exposes device actions in **Developer tools** >
+**Actions**. Search for `store_preset` or `apply_preset` to save or recall
+one of the ten full preset slots. Set `index` to `0` through `9` and give
+`store_preset` a `name`. A full preset saves the **Stock Sound** selection,
+not the active stream or playback state. Select **None** before saving a
+silent preset. The integration also exposes `send_text` for one-time scrolling
+text and `favorite_*` actions for managing or recalling favorites.
+
+### Add raw acceleration or Not Upright
+
+**Tilt Angle** and **Upright** are on by default. To expose raw acceleration
+in g or a separate **Not Upright** binary sensor, add this block at the top
+level of your device's ESPHome YAML, next to `packages`. Keep only the entries
+you want. ESPHome merges the block with the package's `hatch_accelerometer`
+configuration. Validate and rebuild to add the entities.
+
+```yaml
+hatch_accelerometer:
+  acceleration_x:
+    name: Acceleration X
+  acceleration_y:
+    name: Acceleration Y
+  acceleration_z:
+    name: Acceleration Z
+  not_upright:
+    name: Not Upright
+```
+
+If you only need to trigger an automation when the Hatch tips, use the
+existing **Upright** entity with a state trigger to `"off"`.
+
+### Button gestures
+
+Each physical control has a Home Assistant event entity. The event entity's
+`event_type` attribute identifies the gesture.
+
+| Event entity | Event types | Default local action |
+| --- | --- | --- |
+| Touch Ring | `tap`, `hold`, `double`, `triple` | Tap recalls the next saved preset. Hold stops the light and speaker on release. |
+| Bottom Button | `tap`, `hold`, `double`, `triple` | Tap recalls the previous saved preset. Power shutdown is separate. |
+| Night Light Button | `tap`, `hold`, `double`, `triple` | Tap toggles the light. Hold for 5 seconds to save on release, or for 10 seconds to preview deletion and delete on release. |
+| Volume Up Button, Volume Down Button | `tap`, `hold` | Tap steps the volume once. Hold repeats until release. |
+| Brightness Up Button, Brightness Down Button | `tap`, `hold` | Tap steps the brightness once. Hold repeats until release. |
+
+Double and triple taps have no built-in action. If your automation listens for
+`esphome.hatch_button`, replace that trigger with a state trigger on the new
+event entity. No permission for the device to send Home Assistant events is
+required.
+
+### Let Home Assistant handle button actions
+
+Local button actions are on by default and work without a Home Assistant
+connection. To run only your Home Assistant automations on a button gesture,
+add `enable_local_button_actions: "false"` to the existing `substitutions`
+block in your device's ESPHome YAML. Do not add a second `substitutions` block.
+
+```yaml
+substitutions:
+  enable_local_button_actions: "false"
+```
+
+Validate and rebuild. All seven event entities remain available, but the
+buttons no longer adjust the light or volume, stop playback, or recall, save,
+or delete presets on their own. You can still use the entities and preset
+actions from Home Assistant. **Toddler Lock** still suppresses gesture events.
+The setting does not change the independent power shutdown behavior when
+experimental power control is enabled.
+
+### Automate a button gesture
+
+In the Home Assistant automation editor, create an automation and choose
+**Edit in YAML**. This example turns on a light when you double-tap the touch
+ring. Replace `event.example_touch_ring` and `light.example_lamp` with your
+entity IDs. Use the event types in the table above to match other gestures.
+
+```yaml
+alias: Turn on a light on Hatch double tap
+triggers:
+  - trigger: state
+    entity_id: event.example_touch_ring
+    not_to: ["unknown", "unavailable"]
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state is not none
+         and trigger.from_state.state != 'unavailable'
+         and trigger.to_state.attributes.get('event_type') == 'double' }}
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.example_lamp
+```
+
+The trigger watches the event entity's timestamp, not changes to its
+attributes. The condition skips initial entity registration and transitions
+from `unavailable`.
+
+## Installation and recovery
+
+This example does not provide a first-install or return-to-stock path. Identify
+the exact model and device MAC before any firmware write. Make and verify a
+full-flash backup if you have serial access. Do not follow the Rest serial wiring
+or flash instructions for a Rest+. The [local Rest+ flasher](../flasher/README.md)
+covers supported stock firmware versions. An application-only install does not
+create a backup.
+
+If Wi-Fi is unreachable, connect to the password-protected fallback hotspot and
+open `http://192.168.4.1` to enter Wi-Fi credentials. Access to the hotspot also
+grants access to the captive portal's browser OTA endpoint. Use encrypted native
+ESPHome OTA for regular updates.
+
+## Package layout
+
+- [hatch-plus-base.yaml](../esphome/hatch-plus-base.yaml) holds the fixed wiring,
+  buses, audio pipeline, and pinned component revisions.
+- [hatch-plus-controls.yaml](../esphome/hatch-plus-controls.yaml) connects each
+  physical control to its local action and native event entity.
+- [hatch-plus-presets.yaml](../esphome/hatch-plus-presets.yaml) wires the local
+  preset store and its audio and clock settings into the same package.
+
+The preview pins the accelerometer/expander from [#7][accel-pr] and the local
+preset component from [#11][presets-pr]. Those components are reviewed separately;
+this package does not change their code. Re-pin to a common upstream release
+once those dependencies are available upstream.
+
+[accel-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/7
+[presets-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/11
