@@ -4,7 +4,8 @@
 scene is the night light (on or off, colour, white, brightness) and the speaker (what
 it plays, Loop Sound, and volume). There are nine slots, 1–9.
 
-Every action confirms itself on the clock for 3 seconds:
+Every action confirms itself on the clock for 3 seconds. A clock that is turned off
+shows it at its dimmest.
 
 | Action | Clock |
 | --- | --- |
@@ -27,7 +28,15 @@ hatch_scenes:
   display_id: clock_display
 ```
 
-It also adds Home Assistant actions: `save_scene`, `load_scene` and `delete_scene`
+An optional `current_scene` text sensor reports the slot loaded or saved last
+(`1`–`9`, or `None`):
+
+```yaml
+  current_scene:
+    name: Current Scene
+```
+
+The Rest config also adds Home Assistant actions: `save_scene`, `load_scene` and `delete_scene`
 take a `slot`, and `next_scene` and `previous_scene` take none.
 
 ## Actions
@@ -47,27 +56,27 @@ take a `slot`, and `next_scene` and `previous_scene` take none.
 `slot` also takes a lambda (`slot: !lambda return slot;`). This is how the Home Assistant
 actions pass it through.
 
-For the physical buttons, map gestures from [`hatch_buttons`](hatch-buttons.md), for
-example:
-
-```yaml
-hatch_buttons:
-  on_button:
-    - if:
-        condition:
-          lambda: return button == "touch" && gesture == "tap";
-        then:
-          - hatch_scenes.next: scenes
-    - if:
-        condition:
-          lambda: return button == "touch" && gesture == "hold";
-        then:
-          - hatch_scenes.save: scenes
-```
-
 C++ lambdas can call the same methods: `id(scenes).save()`, `save(slot)`,
 `load(slot)`, `next()`, `previous()`, `remove()`, `remove(slot)`, and
 `current_slot()`.
+
+## Touch ring
+
+On the Rest, the touch ring runs the scenes. Each touch acts when you let go:
+
+| Touch | Result |
+| --- | --- |
+| Tap | Load the next scene |
+| Hold 1 s | Turn off the night light and sound |
+| Hold 5 s | Save a new scene. The clock shows `SAV?` from 5 s. |
+| Hold 10 s | Delete the current scene. The clock shows `DEL?` from 10 s. |
+
+A touch that you use with a front button (colour cycle, warmth, SD cache files)
+does none of these. Toddler Lock turns the ring off like the other buttons.
+
+The ring now does on the device what the
+[touch ring favorites blueprint](../blueprints/automation/hatch-rest/touch-ring-favorites.yaml)
+does in Home Assistant. Don't use both, or each tap acts twice.
 
 ## What is saved
 
