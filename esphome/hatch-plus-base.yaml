@@ -1,7 +1,4 @@
 # Hatch Rest+ 2nd gen (HBRESTPLUS2 / RIoT+). The node config owns credentials.
-substitutions:
-  enable_experimental_power_control: "false"
-
 packages:
   controls: !include hatch-plus-controls.yaml
   presets: !include hatch-plus-presets.yaml
@@ -240,8 +237,7 @@ hatch_plus_power:
   i2c_id: plus_bus1
   id: plus_power
   hatch_expander_id: io_exp
-  # Diagnostics by default. See docs/rest-plus-2-esphome.md before enabling control.
-  allow_control: ${enable_experimental_power_control}
+  allow_control: true
   allow_nvm_programming: false
   light_id: night_light
   media_player_id: player

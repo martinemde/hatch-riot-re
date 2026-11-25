@@ -3,7 +3,7 @@
 - **`hatch-rest*.yaml`** — the working stock replacement for the Hatch Rest 2nd gen (RIoT). See
   [../docs/esphome-plan.md](../docs/esphome-plan.md#replacement-config) for what it does.
 - **[`hatch-plus-example.yaml`](hatch-plus-example.yaml)** — Rest+ 2nd gen (RIoT+). See the
-  [Rest+ guide](../docs/rest-plus-2-esphome.md) for Builder setup, local controls, and experimental power.
+  [Rest+ guide](../docs/rest-plus-2-esphome.md) for Builder setup, local controls, and battery management.
 - **`hatch-riot-probe.yaml`** — a read-mostly diagnostic firmware for confirming the hardware map. Read
   [../docs/probe-firmware.md](../docs/probe-firmware.md) (safety model and test plan) **before flashing it**.
 

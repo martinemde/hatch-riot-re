@@ -32,8 +32,7 @@ pin by pin on the device with a diagnostic [probe firmware](docs/probe-firmware.
 
 The [Rest+ ESPHome package and Builder setup](docs/rest-plus-2-esphome.md) are
 for HBRESTPLUS2 (RIoT+), not the Rest configuration above. The package provides
-local presets and Home Assistant button events. Experimental power control is
-disabled by default.
+local presets, Home Assistant button events, and built-in battery management.
 
 ## Local Rest+ BLE flasher
 

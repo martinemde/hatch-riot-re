@@ -10,10 +10,10 @@ Use this package only for **HBRESTPLUS2** (RIoT+). For HBREST2 (RIoT), use
    firmware, keep its existing node name and encryption key.
 2. Create a device and replace its YAML with
    [hatch-plus-builder.yaml](../esphome/hatch-plus-builder.yaml). Set the name
-   and friendly name. Read the power notes below before changing the power flag.
+   and friendly name. The starter tracks the current preview branch.
 3. Use **Validate**. The package provides the board wiring, audio sources, button
-   behavior, and component versions. Change the package ref when you want to
-   try a different version. Do not substitute Rest firmware for a Rest+ package.
+   behavior, and component versions. Do not substitute Rest firmware for a
+   Rest+ package.
 
 For a local build, use ESPHome 2026.10.0 and
 [hatch-plus-example.yaml](../esphome/hatch-plus-example.yaml). Copy
@@ -21,20 +21,15 @@ For a local build, use ESPHome 2026.10.0 and
 values. Run `esphome compile esphome/hatch-plus-example.yaml` from the repository
 root. Never flash an example compiled with disposable credentials.
 
-## Experimental power control
+## Battery and power management
 
-Leave `enable_experimental_power_control: "false"` for diagnostics-only use.
-In this mode the package does not turn on the stock night light or amplifier
-power rails, manage charging, or perform low-battery shutdown. **External Power
-Present** remains available as a diagnostic. Run diagnostics under supervision
-with external power.
+The Rest+ package automatically enables its power controller. It manages
+charging, battery reporting, low-battery shutdown, and the power rails for
+the night light and amplifier. GreenPAK nonvolatile memory programming stays
+disabled. This does not change the standard Rest configuration.
 
-Setting the flag to `"true"` opts into the experimental stock load controller,
-battery reporting, charging, and shutdown logic. Charging, thermal protection,
-and battery shutdown have not been safety-validated. Do not use this as an
-unattended battery or charging system. Leave GreenPAK NVM programming off. The
-power component must be the only writer for the amplifier and night-light rails.
-The shutdown sequence has not been verified while controls or presets are active.
+If you installed an earlier preview, use the current Builder starter and remove
+the old power substitution from your device YAML. Keep your device name and secrets.
 
 ## Home Assistant controls
 
@@ -45,8 +40,8 @@ and turn on **Enabled**.
 
 | Entity | How to use it |
 | --- | --- |
-| Night Light | Set the RGB color, white level, or brightness. The physical light rail requires experimental power control. |
-| Speaker | Play audio or set the volume. Select stock sounds separately in **Stock Sound**. The amplifier rail requires experimental power control. |
+| Night Light | Set the RGB color, white level, or brightness. |
+| Speaker | Play audio or set the volume. Select stock sounds separately in **Stock Sound**. |
 | Clock Display | Set display brightness or turn the display off. |
 | Show Clock | Turn on to show the time from Home Assistant. Turn off to show **Display Text** instead. |
 | Display Text | Enter scrolling text to show while **Show Clock** is off. |
@@ -54,8 +49,8 @@ and turn on **Enabled**.
 | Stock Sound | Select a sound from the stock SD card, or select **None** to stop playback. |
 | Loop Sound | Turn off to stop the selected sound after one play. Selecting a stock sound turns looping back on. |
 | Current Favorite | Read the current favorite slot in an automation or dashboard. |
-| Battery | Read the battery percentage in experimental power control mode. |
-| External Power Present | Check whether the unit detects external power. This diagnostic also works with experimental power control off. |
+| Battery | Read the reported battery percentage. |
+| External Power Present | Check whether the unit detects external power. |
 | Tilt Angle | Read the angle in degrees. The package reports changes of at least 2°. |
 | Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
 
@@ -124,8 +119,7 @@ Validate and rebuild. All seven event entities remain available, but the
 buttons no longer adjust the light or volume, stop playback, or recall, save,
 or delete presets on their own. You can still use the entities and preset
 actions from Home Assistant. **Toddler Lock** still suppresses gesture events.
-The setting does not change the independent power shutdown behavior when
-experimental power control is enabled.
+The setting does not change power-button shutdown or battery management.
 
 ### Automate a button gesture
 
@@ -182,8 +176,9 @@ ESPHome OTA for regular updates.
 
 The preview pins the accelerometer/expander from [#7][accel-pr] and the local
 preset component from [#11][presets-pr]. Those components are reviewed separately;
-this package does not change their code. Re-pin to a common upstream release
-once those dependencies are available upstream.
+this package does not change their code. Once those dependencies are upstream,
+select the package and components together using an upstream branch or release
+tag.
 
 [accel-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/7
 [presets-pr]: https://github.com/w1ll1am23/hatch-riot-re/pull/11

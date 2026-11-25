@@ -47,8 +47,6 @@ jobs:
         run: esphome compile esphome/hatch-buttons-check.yaml
       - name: Compile Rest+ example (validation only)
         run: esphome compile esphome/hatch-plus-example.yaml
-      - name: Compile Rest+ example with experimental power control (validation only)
-        run: esphome -s enable_experimental_power_control true compile esphome/hatch-plus-example.yaml
       - name: Compile Rest+ example with Home Assistant button actions only (validation only)
         run: esphome -s enable_local_button_actions false compile esphome/hatch-plus-example.yaml
       # Deliberately do not publish these binaries: they contain CI-only credentials.
