@@ -24,6 +24,11 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   void set_interrupt_pin(InternalGPIOPin *pin) { this->interrupt_pin_ = pin; }
   void set_p0_push_pull(bool on) { this->p0_push_pull_ = on; }
 
+  // Access another device on the expander's bus (7-bit address, up to 240 bytes).
+  // Main-loop context only; do not install another I2C master on these pins.
+  bool read_device_registers(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
+  bool write_device_registers(uint8_t address, uint8_t reg, const uint8_t *data, size_t len);
+
   // Error-visible output-latch access for the recovered load controller. Physical
   // pins only; restricted to STOCK_MASK, preserving all unrelated latch bits.
   int initialize_load_outputs_status();
@@ -45,7 +50,11 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   void apply_mode_(uint8_t pin, bool input);
   bool update_reg_(uint8_t reg, uint8_t mask, uint8_t bits, bool verify = true);
   bool write_reg_(uint8_t reg, uint8_t value);
-  bool read_regs_(uint8_t reg, uint8_t *data, size_t len);
+  bool read_regs_(uint8_t reg, uint8_t *data, size_t len) {
+    return this->read_regs_(this->address_, reg, data, len);
+  }
+  bool read_regs_(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
+  bool write_regs_(uint8_t address, uint8_t reg, const uint8_t *data, size_t len);
   void settle_();
   // Extend the no-transaction window by gap_ms from now.
   void mark_txn_(uint32_t gap_ms);
@@ -60,9 +69,14 @@ class HatchExpander final : public Component, public gpio_expander::CachedGpioEx
   bool bb_stop_();
   bool bb_write_byte_(uint8_t byte);  // true on ACK
   bool bb_read_byte_(uint8_t *byte, bool ack);
-  bool bb_write_reg_(uint8_t reg, uint8_t value);
-  bool bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len);
-  bool bb_read_regs_(uint8_t reg, uint8_t *data, size_t len);
+  bool bb_write_regs_(uint8_t reg, const uint8_t *data, size_t len) {
+    return this->bb_write_regs_(this->address_, reg, data, len);
+  }
+  bool bb_write_regs_(uint8_t address, uint8_t reg, const uint8_t *data, size_t len);
+  bool bb_read_regs_(uint8_t reg, uint8_t *data, size_t len) {
+    return this->bb_read_regs_(this->address_, reg, data, len);
+  }
+  bool bb_read_regs_(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
   void bb_fail_(const char *what);
 
   uint8_t sda_{0};
