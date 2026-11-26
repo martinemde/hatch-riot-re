@@ -125,7 +125,7 @@ void overlay_scroller_and_brightness() {
   d.show_scrolling_text("123456"); tick(d, 100); tick(d, 2100);
   d.show_text_overlay("7."); tick(d, 2200);
   digits(d, {8, 0, 0, 0, 0x87, 0});
-  d.set_brightness(15); tick(d, 2300); digits(d, {0x18, 0x0e});
+  d.set_brightness(14); tick(d, 2300); digits(d, {0x18, 0x8e});
   d.show_scrolling_text("123456"); tick(d, 2500); assert(d.frames.size() == 4);
   tick(d, 5099); assert(d.frames.size() == 4);
   tick(d, 5100); digits(d, {8, 0x06, 0x5b, 0x4f, 0x66, 0});
@@ -229,7 +229,7 @@ void once_gaps_no_catchup_and_wrap() {
   d.show_scrolling_text_once("123456");
   tick(d, start + 199); assert(d.frames.size() == 2);
   tick(d, start + 200); digits(d, {8, 0x06, 0x5b, 0x4f, 0x66, 0});
-  d.set_brightness(15); tick(d, start + 2150); digits(d, {0x18, 0x0e});
+  d.set_brightness(14); tick(d, start + 2150); digits(d, {0x18, 0x8e});
   tick(d, start + 2200); assert(d.frames.size() == 4);
   tick(d, start + 2250); digits(d, {8, 0x5b, 0x4f, 0x66, 0x6d, 0});
   tick(d, start + 2749); assert(d.frames.size() == 5);
@@ -257,6 +257,25 @@ void held_overlay_until_clear() {
   digits(d, {8, 0, 0, 0, 0x07, 0});
   tick(d, 62400); digits(d, {8, 0x5b, 0x4f, 0x66, 0x6d, 1});
 }
+void overlay_lights_a_clock_that_is_off() {
+  HatchDisplay d;
+  esphome::test_now = 0;
+  d.set_brightness(15); tick(d, 100);
+  digits(d, {0x18, 0x0e});
+  d.show_text_overlay("SAV1", 3000);
+  tick(d, 200); digits(d, {8, 0x6d, 0x77, 0x3e, 0x06, 0});
+  tick(d, 300); digits(d, {0x18, 0x8e});  // Dimmest, after the overlay's digits.
+  tick(d, 3300); digits(d, {0x18, 0x0e});  // Dark again before the clock's own digits.
+  tick(d, 3400); digits(d, {8, 0, 0, 0, 0, 0});
+  tick(d, 10000); assert(d.frames.size() == 5);
+  // A lit clock keeps its brightness.
+  d.set_brightness(4); tick(d, 10100);
+  d.show_text_overlay("FAV1", 3000); tick(d, 10200);
+  tick(d, 13200); tick(d, 13300); tick(d, 20000);
+  assert(d.frames.size() == 8);
+  digits(d, {8, 0, 0, 0, 0, 0});
+}
+
 int main() {
   held_overlay_until_clear();
   start_and_repeat(); repeated_input_and_brightness(); short_and_decimals();
@@ -264,4 +283,5 @@ int main() {
   overlay_latest_content(); overlay_scroller_and_brightness(); overlay_replacement_wrap_and_gap();
   once_scroll_and_latest_clock(); once_short_and_underlying_updates(); once_replacements();
   once_underlying_scroller_restarts(); once_gaps_no_catchup_and_wrap();
+  overlay_lights_a_clock_that_is_off();
 }

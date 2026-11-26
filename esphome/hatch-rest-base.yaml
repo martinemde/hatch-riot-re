@@ -5,8 +5,8 @@
 #
 # Flash ONLY after ../scripts/backup.sh has made and verified a full-flash backup.
 #
-# This is the shared base config. It needs the local components hatch_expander, hatch_display and hatch_status_led,
-# which the top-level file provides via `external_components`:
+# This is the shared base config. It needs the local components hatch_expander, hatch_display, hatch_scenes and
+# hatch_status_led, which the top-level file provides via `external_components`:
 #   hatch-rest.yaml          - local development (components from ./components)
 #   hatch-rest-builder.yaml  - ESPHome Builder add-on (config and components from GitHub)
 
@@ -64,6 +64,30 @@ api:
         message: string
       then:
         - lambda: id(clock_display).show_scrolling_text_once(message);
+    # Scenes by slot number (1-9); see ../docs/hatch-scenes.md.
+    - action: save_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.save:
+            slot: !lambda return slot;
+    - action: load_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.load: !lambda return slot;
+    - action: delete_scene
+      variables:
+        slot: int
+      then:
+        - hatch_scenes.delete:
+            slot: !lambda return slot;
+    - action: next_scene
+      then:
+        - hatch_scenes.next: scenes
+    - action: previous_scene
+      then:
+        - hatch_scenes.previous: scenes
 
 ota:
   - platform: esphome
@@ -380,6 +404,7 @@ binary_sensor:
             - if:
                 condition: {binary_sensor.is_on: touch}
                 then:
+                  - script.execute: ring_used_as_modifier
                   - script.execute: {id: play_cached_audio, step: 1}
                 else:
                   - media_player.volume_up: player
@@ -396,6 +421,7 @@ binary_sensor:
             - if:
                 condition: {binary_sensor.is_on: touch}
                 then:
+                  - script.execute: ring_used_as_modifier
                   - script.execute: {id: adjust_white_warmth, step: 0.02}
                 else:
                   - light.dim_relative:
@@ -414,6 +440,7 @@ binary_sensor:
             - if:
                 condition: {binary_sensor.is_on: touch}
                 then:
+                  - script.execute: ring_used_as_modifier
                   - script.execute: cycle_night_light_colour
                 else:
                   - light.toggle: night_light
@@ -430,6 +457,7 @@ binary_sensor:
             - if:
                 condition: {binary_sensor.is_on: touch}
                 then:
+                  - script.execute: ring_used_as_modifier
                   - script.execute: {id: play_cached_audio, step: -1}
                 else:
                   - media_player.volume_down: player
@@ -446,6 +474,7 @@ binary_sensor:
             - if:
                 condition: {binary_sensor.is_on: touch}
                 then:
+                  - script.execute: ring_used_as_modifier
                   - script.execute: {id: adjust_white_warmth, step: -0.02}
                 else:
                   - light.dim_relative:
@@ -453,7 +482,10 @@ binary_sensor:
                       relative_brightness: -10%
   # Top touch (touch controller output, active high). Debounced: a touch must last 50 ms to count (drops noise
   # spikes), and short dropouts while held are bridged so a hold isn't split into a tap plus a new touch.
-  # Held, it changes what the front buttons do (touch first, then the button):
+  # On its own, it runs the scenes, acting on release:
+  #   tap = next scene, hold 1 s = night light and sound off, 5 s = save a new scene (SAV? shows),
+  #   10 s = delete the current scene (DEL? shows).
+  # Held, it changes what the front buttons do instead (touch first, then the button):
   #   night light (hold) = cycle colours, brightness up / down (hold) = warmer / cooler white,
   #   volume up / down = next / previous file in the SD card cache.
   - platform: gpio
@@ -463,6 +495,32 @@ binary_sensor:
     filters:
       - delayed_on: 50ms
       - delayed_off: 100ms
+    on_press:
+      - lambda: |-
+          id(ring_pressed_ms) = millis();
+          id(ring_was_modifier) = false;
+      - if:
+          condition: {switch.is_off: toddler_lock}
+          then:
+            - script.execute: ring_hold_preview
+    on_release:
+      - script.stop: ring_hold_preview
+      - lambda: |-
+          if (id(toddler_lock).state || id(ring_was_modifier)) {
+            id(clock_display).clear_overlay();
+            return;
+          }
+          const uint32_t held = millis() - id(ring_pressed_ms);
+          if (held < 1000) {
+            id(scenes).next();
+          } else if (held < 5000) {
+            id(night_light).turn_off().perform();
+            id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
+          } else if (held < 10000) {
+            id(scenes).save();
+          } else {
+            id(scenes).remove();
+          }
   # Bottom "CONNECT" button (active low). Stock: hold >2 s = Bluetooth setup; exposed to Home Assistant here.
   # A short press shows the status LEDs for 30 s (works with the toddler lock on: it only shows status).
   - platform: gpio
@@ -482,6 +540,11 @@ globals:
   - id: night_light_hue
     type: int
     initial_value: '0'
+  # When the touch ring was last pressed (millis), and whether a front button was used with it since.
+  - id: ring_pressed_ms
+    type: uint32_t
+  - id: ring_was_modifier
+    type: bool
 
 # ---------------------------------------------------------------- Clock display (display MCU over UART1)
 uart:
@@ -496,6 +559,13 @@ hatch_display:
   id: clock_display
   uart_id: disp_uart
   brightness: 4
+
+# Saved night light + sound in slots 1-9, confirmed on the clock (SAV1, FAV1, DEL1). See ../docs/hatch-scenes.md.
+hatch_scenes:
+  id: scenes
+  light_id: night_light
+  media_player_id: player
+  display_id: clock_display
 
 number:
   - platform: template
@@ -586,6 +656,20 @@ script:
           id(status_leds).set(hatch_status_led::WINDOW_WIFI, hatch_status_led::COLOUR_OFF);
           id(status_leds).set(hatch_status_led::WINDOW_LOCK, hatch_status_led::COLOUR_OFF);
 
+  # While the touch ring is held on its own, show what letting go will do once it changes from "off" to a scene.
+  - id: ring_hold_preview
+    mode: restart
+    then:
+      - delay: 5s
+      - lambda: id(clock_display).show_text_overlay("SAV?", 0);
+      - delay: 5s
+      - lambda: id(clock_display).show_text_overlay("DEL?", 0);
+  # A front button pressed while the ring is held: this touch is a modifier, not a scene gesture.
+  - id: ring_used_as_modifier
+    then:
+      - lambda: id(ring_was_modifier) = true;
+      - script.stop: ring_hold_preview
+      - lambda: id(clock_display).clear_overlay();
   # Touch ring + night light button held: sweep the night light around the colour wheel (white off), about 6 s per
   # turn, from the current colour. It stops on the colour it's at when either is released.
   - id: cycle_night_light_colour

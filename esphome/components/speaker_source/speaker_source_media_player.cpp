@@ -886,6 +886,15 @@ void SpeakerSourceMediaPlayer::set_volume_(float volume, bool publish) {
   this->defer([this, volume]() { this->volume_trigger_.trigger(volume); });
 }
 
+std::string SpeakerSourceMediaPlayer::playing_uri() const {
+  const PipelineContext &ps = this->pipelines_[MEDIA_PIPELINE];
+  media_source::MediaSource *source = ps.active_source;
+  if (source == nullptr || source->has_internal_playlist() || ps.playlist_index >= ps.playlist.size()) {
+    return "";
+  }
+  return ps.playlist[this->get_playlist_position_(MEDIA_PIPELINE)];
+}
+
 size_t SpeakerSourceMediaPlayer::get_playlist_position_(uint8_t pipeline) const {
   const PipelineContext &ps = this->pipelines_[pipeline];
 
