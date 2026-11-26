@@ -228,7 +228,7 @@ static void test_auto_initializes_unique_msa311() {
   assert(accel.valid() && bus.writes.size() == 3);
 }
 
-static void assert_auto_stays_unresolved(HatchExpander &bus, bool expect_msa311_mode) {
+static void assert_auto_stays_unresolved(HatchExpander &bus, bool expect_msa311_mode, bool expect_retries) {
   HatchAccelerometer accel;
   accel.set_expander(&bus);
   accel.set_allow_initialization(true);
@@ -237,7 +237,15 @@ static void assert_auto_stays_unresolved(HatchExpander &bus, bool expect_msa311_
   assert_auto_probe_reads(bus, expect_msa311_mode);
   assert(bus.writes.empty() && !accel.valid());
 
-  // Even if the bus later has a unique match, AUTO must not reopen discovery.
+  // Nothing matched: AUTO keeps probing, with the same reads each poll, up to the attempt limit.
+  const unsigned probes = expect_retries ? hatch_accelerometer::MAX_AUTO_PROBE_ATTEMPTS : 1;
+  const size_t reads_per_probe = bus.reads.size();
+  for (unsigned i = 1; i < probes; i++)
+    accel.update();
+  assert(bus.reads.size() == reads_per_probe * probes);
+  assert(bus.writes.empty() && !accel.valid());
+
+  // After giving up, AUTO must not reopen discovery, even if the bus later has a unique match.
   bus.reads.clear();
   bus.da213_id = 0x13;
   bus.msa311_id.reset();
@@ -249,24 +257,48 @@ static void assert_auto_stays_unresolved(HatchExpander &bus, bool expect_msa311_
 
 static void test_auto_stops_on_ambiguous_or_missing_devices() {
   HatchExpander both;
-  assert_auto_stays_unresolved(both, true);
+  assert_auto_stays_unresolved(both, true, false);
 
   HatchExpander neither;
   neither.da213_id.reset();
   neither.msa311_id.reset();
-  assert_auto_stays_unresolved(neither, false);
+  assert_auto_stays_unresolved(neither, false, true);
+}
+
+static void test_auto_retries_until_sensor_answers() {
+  HatchExpander bus;
+  bus.da213_id.reset();
+  bus.msa311_id.reset();
+  HatchAccelerometer accel;
+  accel.set_expander(&bus);
+
+  // The bus isn't ready on the first polls after boot.
+  accel.update();
+  accel.update();
+  assert(bus.writes.empty() && !accel.valid());
+
+  bus.da213_id = 0x13;
+  bus.reads.clear();
+  accel.update();
+  assert_auto_probe_reads(bus, false);
+  assert((bus.writes == std::vector<HatchExpander::Write>{{0x27, 0x00, {0x24}}, {0x27, 0x0F, {0x00, 0x03, 0x06}}}));
+
+  bus.reads.clear();
+  accel.update();
+  assert((bus.reads == std::vector<HatchExpander::Read>{{0x27, 0x02, 6}}));
+  assert(accel.valid());
 }
 
 static void test_auto_rejects_unverified_msa311() {
   HatchExpander msa321;
   msa321.da213_id.reset();
   msa321.msa311_mode = 0xDE;  // MSA321 shares the MSA311 chip ID.
-  assert_auto_stays_unresolved(msa321, true);
+  assert_auto_stays_unresolved(msa321, true, true);
 
   HatchExpander unreadable_mode;
   unreadable_mode.da213_id.reset();
   unreadable_mode.fail_read_reg = 0x11;
-  assert_auto_stays_unresolved(unreadable_mode, true);
+  assert_auto_stays_unresolved(unreadable_mode, true, true);
 }
 
 static void test_auto_read_only_discovery() {
@@ -291,6 +323,7 @@ int main() {
   test_auto_initializes_unique_da213();
   test_auto_initializes_unique_msa311();
   test_auto_stops_on_ambiguous_or_missing_devices();
+  test_auto_retries_until_sensor_answers();
   test_auto_rejects_unverified_msa311();
   test_auto_read_only_discovery();
 }

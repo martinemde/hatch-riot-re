@@ -10,6 +10,9 @@ namespace esphome::hatch_accelerometer {
 
 enum class AccelerometerModel { AUTO, DA213, MSA311 };
 
+// AUTO re-probes on each poll until one profile matches, at most this many times.
+static constexpr uint8_t MAX_AUTO_PROBE_ATTEMPTS = 10;
+
 class HatchAccelerometer : public PollingComponent {
  public:
   void set_expander(hatch_expander::HatchExpander *expander) { this->expander_ = expander; }
@@ -42,7 +45,7 @@ class HatchAccelerometer : public PollingComponent {
   binary_sensor::BinarySensor *not_upright_{nullptr};
   Acceleration acceleration_{};
   AccelerometerModel model_{AccelerometerModel::AUTO};
-  bool auto_probe_done_{false};
+  uint8_t auto_probe_attempts_{0};
   bool stopped_{false};
   bool allow_initialization_{true};
   bool setup_complete_{false};

@@ -45,14 +45,26 @@ void HatchAccelerometer::update() {
     return;
   bool just_matched = false;
   if (this->model_ == AccelerometerModel::AUTO) {
-    if (this->auto_probe_done_)
+    if (this->auto_probe_attempts_ >= MAX_AUTO_PROBE_ATTEMPTS)
       return;
-    this->auto_probe_done_ = true;
+    this->auto_probe_attempts_++;
     const bool da213 = this->matches_model_(AccelerometerModel::DA213);
     const bool msa311 = this->matches_model_(AccelerometerModel::MSA311);
-    if (da213 == msa311) {
-      ESP_LOGW(TAG, "Accelerometer auto-detection: %s; no sensor configured",
-               da213 ? "both profiles matched" : "no supported profile matched");
+    if (da213 && msa311) {
+      // Ambiguity won't resolve with time: stop probing.
+      this->auto_probe_attempts_ = MAX_AUTO_PROBE_ATTEMPTS;
+      ESP_LOGW(TAG, "Accelerometer auto-detection: both profiles matched; no sensor configured");
+      return;
+    }
+    if (!da213 && !msa311) {
+      // The shared bus can be busy or NACKing right after boot, so retry a bounded number of polls.
+      if (this->auto_probe_attempts_ >= MAX_AUTO_PROBE_ATTEMPTS) {
+        ESP_LOGW(TAG, "Accelerometer auto-detection: no supported profile matched after %u attempts; "
+                      "no sensor configured", (unsigned) MAX_AUTO_PROBE_ATTEMPTS);
+      } else {
+        ESP_LOGD(TAG, "Accelerometer auto-detection attempt %u: no supported profile matched; retrying",
+                 (unsigned) this->auto_probe_attempts_);
+      }
       return;
     }
     this->model_ = da213 ? AccelerometerModel::DA213 : AccelerometerModel::MSA311;
