@@ -73,11 +73,13 @@ same device.
 
 ## Detection and initialization
 
-The default `model: AUTO` checks only `0x27` and `0x62` on the first poll.
-It selects a profile only if exactly one matches. If neither or both match,
-it logs a warning and leaves the sensor unconfigured without retrying
-discovery. An absent address can add a few startup bus errors. The component
-does not poll that address again. Set `model: DA213` or `model: MSA311` to check
+The default `model: AUTO` checks only `0x27` and `0x62`, starting on the first
+poll. It selects a profile only if exactly one matches. If neither matches, it
+probes again on each poll, up to 10 attempts, because the shared bus can be
+busy right after boot. It then logs a warning and leaves the sensor
+unconfigured. If both match, it logs a warning and stops at once. An absent
+address can add some startup bus errors during those attempts. The component
+does not poll that address again after detection ends. Set `model: DA213` or `model: MSA311` to check
 only a known sensor. Both profiles require ID `0x13`. The MSA311 profile
 rejects `0xDE` at register `0x11`, which stock firmware uses to identify the
 MSA321. The MSA311 profile uses the stock `7.1.503` setup for `0x62` and reads
