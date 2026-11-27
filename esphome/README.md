@@ -66,6 +66,16 @@ A first flash of a stock unit still has to go over serial (the stock firmware wo
 back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder's "Manual download" image. See
 [serial-flashing.md](../docs/serial-flashing.md) for the wiring.
 
+### Upgrading from v1.5
+
+Some Home Assistant entities are replaced. Their entity IDs change, for example from
+`number.hatch_rest_a1b2c3_display_brightness` to `light.hatch_rest_a1b2c3_clock_display`. Update automations and
+dashboards that use them, then delete the old entities in Home Assistant.
+
+| v1.5 and earlier | Now |
+|---|---|
+| Display Brightness (number, 0–15) | Clock Display (light): set its brightness, or turn it off to turn the display off |
+
 ## Buttons
 
 | Control | Action |
