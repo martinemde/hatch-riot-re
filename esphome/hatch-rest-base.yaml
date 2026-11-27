@@ -53,6 +53,8 @@ preferences:
 api:
   encryption:
     key: !secret api_encryption_key
+  # Stay up without Home Assistant or Wi-Fi: the buttons, scenes and fallback AP keep working.
+  reboot_timeout: 0s
   on_client_connected:
     - script.execute: update_status_leds
   on_client_disconnected:
@@ -102,6 +104,7 @@ wifi:
   # Radio always on: light sleep (the ESP32 default) delays and bunches packets, and Sendspin loses sync (stutter).
   # Mains powered, so the extra draw doesn't matter.
   power_save_mode: none
+  reboot_timeout: 0s
   # No ssid: the fallback AP takes the device name, MAC suffix included.
   ap:
     password: !secret fallback_ap_password
@@ -119,7 +122,7 @@ esp32_ble:
   # Keep the Bluetooth host's buffers out of internal RAM (shared with Wi-Fi and the audio pipeline).
   use_psram: true
 
-esp32_improv:
+improv_ble:
   authorizer: btn_bottom
 
 time:
