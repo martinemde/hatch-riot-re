@@ -2,7 +2,6 @@
 
 #include <cstdint>
 
-#include "esphome/components/light/light_output.h"
 #include "esphome/core/component.h"
 
 namespace esphome::hatch_plus_power {
@@ -11,19 +10,18 @@ class HatchPlusPower;
 
 namespace esphome::hatch_plus_indicator {
 
-class HatchPlusIndicator : public light::LightOutput, public Component {
+// Each window is a red/green LED with no dimming; yellow is both colours on.
+enum class Color : uint8_t { OFF, RED, YELLOW, GREEN };
+
+class HatchPlusIndicator : public Component {
  public:
   void set_power(hatch_plus_power::HatchPlusPower *power) { power_ = power; }
   void set_indicator(uint8_t indicator) { indicator_ = indicator; }
-  light::LightTraits get_traits() override;
-  void write_state(light::LightState *state) override;
+  void set_color(Color color) { desired_ = color; }
   void loop() override;
   void dump_config() override;
 
  private:
-  // State values accepted by HatchPlusPower::set_indicator().
-  enum class Color : uint8_t { OFF = 0, GREEN = 1, RED = 2, YELLOW = 3 };
-
   hatch_plus_power::HatchPlusPower *power_{nullptr};
   uint8_t indicator_{0};
   Color desired_{Color::OFF}, applied_{Color::OFF};

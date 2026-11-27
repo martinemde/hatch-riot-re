@@ -3,19 +3,18 @@
 
 #include "hatch_plus_indicator.h"
 #include "esphome/components/hatch_plus_power/hatch_plus_power.h"
-#include "esphome/components/light/light_state.h"
 #include "esphome/core/hal.h"
 
+using esphome::hatch_plus_indicator::Color;
 using esphome::hatch_plus_indicator::HatchPlusIndicator;
 using esphome::hatch_plus_power::HatchPlusPower;
-using esphome::light::LightState;
 
 static void tick(HatchPlusIndicator &output, uint32_t now) {
   esphome::test_millis = now;
   output.loop();
 }
 
-static void manual_colors() {
+static void colors() {
   HatchPlusPower owner;
   HatchPlusIndicator output;
   output.set_power(&owner);
@@ -27,28 +26,19 @@ static void manual_colors() {
   assert(owner.attempts.size() == 1);
   assert(owner.attempts.back() == std::make_pair(uint8_t{2}, uint8_t{0}));  // off at boot
 
-  const std::pair<esphome::light::LightColorValues, uint8_t> cases[] = {
-      {{true, 0.01f, 0.02f, 0.1f, 0, 1}, 2},  // red: no dimming, ignore blue
-      {{true, 1, 1, 0, 1, 0}, 1},              // green
-      {{true, 1, 1, 1, 1, 0}, 3},              // yellow
-      {{true, 1, 1, 0, 0, 1}, 0},              // blue only
-      {{true, 1, 1, 1, 0, 0}, 2},
-      {{true, 0, 1, 1, 1, 0}, 0},              // zero brightness
-      {{true, 1, 1, 0, 1, 0}, 1},
-      {{true, 1, 0, 1, 1, 0}, 0},              // zero color brightness
-      {{true, 1, 1, 1, 1, 0}, 3},
-      {{false, 1, 1, 1, 1, 0}, 0},             // explicit off
+  // Power states: 0 off, 1 green, 2 red, 3 yellow.
+  const std::pair<Color, uint8_t> cases[] = {
+      {Color::RED, 2}, {Color::GREEN, 1}, {Color::YELLOW, 3}, {Color::OFF, 0}, {Color::RED, 2},
   };
   uint32_t now = 10;
-  for (const auto &[values, color] : cases) {
-    LightState light{values};
+  for (const auto &[color, state] : cases) {
     const auto before = owner.attempts.size();
-    output.write_state(&light);
+    output.set_color(color);
     assert(owner.attempts.size() == before);  // the component loop owns hardware updates
     now += 500;
     tick(output, now);
     assert(owner.attempts.size() == before + 1);
-    assert(owner.attempts.back() == std::make_pair(uint8_t{2}, color));
+    assert(owner.attempts.back() == std::make_pair(uint8_t{2}, state));
   }
 }
 
@@ -57,8 +47,7 @@ static void readiness_retry_and_refresh() {
   HatchPlusIndicator output;
   output.set_power(&owner);
   output.set_indicator(1);
-  LightState light{{true, 1, 1, 1, 0, 0}};
-  output.write_state(&light);
+  output.set_color(Color::RED);
   tick(output, 0);
   assert(owner.attempts.empty());
 
@@ -73,8 +62,7 @@ static void readiness_retry_and_refresh() {
   assert(owner.attempts.size() == 1);
 
   // Retry the latest requested state, not the failed snapshot.
-  light.current_values.green = 1;
-  output.write_state(&light);
+  output.set_color(Color::YELLOW);
   owner.succeed = true;
   tick(output, start + 500);
   assert(owner.attempts.size() == 2);
@@ -98,6 +86,6 @@ static void readiness_retry_and_refresh() {
 }
 
 int main() {
-  manual_colors();
+  colors();
   readiness_retry_and_refresh();
 }
