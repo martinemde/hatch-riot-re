@@ -8,8 +8,17 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   name_add_mac_suffix: true
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: id(sd_cache_source).set_enabled(id(sd_cache_enabled).state);
 
 logger:
+
+# Saved settings are written to flash in one batch per interval. A write can stall audio for over a second (Sendspin
+# lost sync on each one), so batch them less often. Changes from the last 5 min before a power cut are lost.
+preferences:
+  flash_write_interval: 5min
 
 api:
   reboot_timeout: 0s
@@ -28,6 +37,15 @@ wifi:
   reboot_timeout: 0s
 
 captive_portal:
+
+# Bluetooth Wi-Fi setup (Improv): when the device can't join Wi-Fi it advertises over BLE, and the Home Assistant
+# app / improv-wifi.com can send it new credentials. Holding the bottom button authorizes it for a minute.
+esp32_ble:
+  # Keep the Bluetooth host's buffers out of internal RAM (shared with Wi-Fi and the audio pipeline).
+  use_psram: true
+
+improv_ble:
+  authorizer: btn_bottom
 
 time:
   - platform: homeassistant
@@ -150,6 +168,17 @@ switch:
       hatch_expander: io_exp
       number: 5
       mode: output
+  # Cache web audio on the SD card. Off: the card is unmounted and powered down, and everything streams.
+  - platform: template
+    id: sd_cache_enabled
+    name: SD Card Cache
+    icon: mdi:sd
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: id(sd_cache_source).set_enabled(true);
+    on_turn_off:
+      - lambda: id(sd_cache_source).set_enabled(false);
 
 i2s_audio:
   - id: i2s_out
@@ -245,3 +274,35 @@ text_sensor:
       if (id(hatch_wireless_power).state) return {"base"};
       if (id(hatch_plug_power).state) return {"plug"};
       return {"battery"};
+
+sensor:
+  - platform: wifi_signal
+    name: Wi-Fi Signal
+    update_interval: 60s
+  - platform: uptime
+    name: Uptime
+  - platform: template
+    name: SD Cache Used
+    icon: mdi:sd
+    unit_of_measurement: MB
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return id(sd_cache_source).cache_used_mb();
+  - platform: template
+    name: SD Cache Files
+    icon: mdi:file-music
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return id(sd_cache_source).cache_files();
+
+button:
+  - platform: restart
+    name: Restart
+  - platform: template
+    name: Clear SD Cache
+    icon: mdi:delete-sweep
+    entity_category: config
+    on_press:
+      - lambda: id(sd_cache_source).clear_cache();

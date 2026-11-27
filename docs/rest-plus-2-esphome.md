@@ -48,6 +48,9 @@ and turn on **Enabled**.
 | Toddler Lock | Turn on to suppress physical button gestures and their local actions. Home Assistant can still control the device. |
 | Stock Sound | Select a sound from the stock SD card, or select **None** to stop playback. |
 | Loop Sound | Turn off to stop the selected sound after one play. Selecting a stock sound turns looping back on. |
+| SD Card Cache | Turn on to save web audio to the SD card as it plays and replay it from the card. Off by default. |
+| SD Cache Used, SD Cache Files | Read how much of the card the cache uses. |
+| Clear SD Cache | Delete every cached file. Stock sounds are not affected. |
 | Current Scene | Read the scene slot loaded or saved last (`1` to `9`), or `None`. |
 | Battery | Read the reported battery percentage. |
 | Power Source | Read `base`, `plug`, or `battery`. The base takes priority when both inputs are present. If the power status cannot be read, it reports `unknown`. |
@@ -55,6 +58,8 @@ and turn on **Enabled**.
 | Wireless Voltage Present | Check whether voltage from the wireless charging base is detected. |
 | Tilt Angle | Read the angle in degrees. The package reports changes of at least 2°. |
 | Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
+| Wi-Fi Signal, Uptime | Read the connection strength and the time since the last restart. |
+| Restart | Restart the device. |
 
 The ESPHome integration also exposes device actions in **Developer tools** >
 **Actions**. `save_scene`, `load_scene`, and `delete_scene` take a `slot`
@@ -99,6 +104,16 @@ Each physical control has a Home Assistant event entity. The event entity's
 | Night Light Button | `tap`, `hold`, `double`, `triple` | Tap toggles the light. |
 | Volume Up Button, Volume Down Button | `tap`, `hold` | Tap steps the volume once. Hold repeats until release. |
 | Brightness Up Button, Brightness Down Button | `tap`, `hold` | Tap steps the brightness once. Hold repeats until release. |
+
+Hold the Touch Ring first, then press a front button, to change what that
+button does. Neither control sends an event for the combination, and the ring
+does not stop playback, save, or delete a scene when you let go.
+
+| With the Touch Ring held | Local action |
+| --- | --- |
+| Night Light Button (hold) | Cycle the night light through the colours. |
+| Brightness Up / Down Button (hold) | Make the white light warmer / cooler. |
+| Volume Up / Down Button | Play the next / previous file in the SD card cache. |
 
 Double and triple taps have no built-in action. If your automation listens for
 `esphome.hatch_button`, replace that trigger with a state trigger on the new
@@ -166,6 +181,16 @@ If Wi-Fi is unreachable, connect to the password-protected fallback hotspot and
 open `http://192.168.4.1` to enter Wi-Fi credentials. Access to the hotspot also
 grants access to the captive portal's browser OTA endpoint. Use encrypted native
 ESPHome OTA for regular updates.
+
+While Wi-Fi is unreachable, the device also offers Bluetooth Wi-Fi setup
+(Improv). Hold the bottom button to authorize it for a minute, then send new
+credentials from the Home Assistant app or improv-wifi.com. To remove it, add
+this to your device's ESPHome YAML:
+
+```yaml
+improv_ble: !remove
+esp32_ble: !remove
+```
 
 ## Package layout
 

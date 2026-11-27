@@ -5,12 +5,17 @@ namespace esphome::hatch_buttons {
 void HatchButtons::set_child_lock(bool locked) {
   child_lock_ = locked;
   if (!locked_()) return;
-  for (auto &button : buttons_) {
-    const bool active = !button.cancelled && (button.pressed || button.clicks != 0);
-    button.clicks = 0;
-    button.cancelled = button.pressed;
-    if (active) for (auto &callback : cancel_callbacks_) callback(button.name);
-  }
+  for (auto &button : buttons_) cancel_(button);
+}
+void HatchButtons::cancel(const std::string &name) {
+  for (auto &button : buttons_)
+    if (button.name == name) cancel_(button);
+}
+void HatchButtons::cancel_(Button &button) {
+  const bool active = !button.cancelled && (button.pressed || button.clicks != 0);
+  button.clicks = 0;
+  button.cancelled = button.pressed;
+  if (active) for (auto &callback : cancel_callbacks_) callback(button.name);
 }
 void HatchButtons::emit_(const Button &button, const std::string &gesture) {
   for (auto &callback : button_callbacks_) {

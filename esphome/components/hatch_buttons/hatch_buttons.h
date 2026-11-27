@@ -23,12 +23,15 @@ class HatchButtons : public Component {
   bool get_child_lock() const { return child_lock_; }
   void add_button(const std::string &name) { buttons_.push_back({name}); }
   void button_event(const std::string &name, bool pressed);
+  // Drops the button's pending clicks and its current press, which then reports no gesture or release.
+  void cancel(const std::string &name);
   void add_on_button_callback(std::function<void(std::string, std::string)> cb) { button_callbacks_.push_back(cb); }
   void add_on_press_callback(std::function<void(std::string)> cb) { press_callbacks_.push_back(cb); }
   void add_on_release_callback(std::function<void(std::string, uint32_t)> cb) { release_callbacks_.push_back(cb); }
   void add_on_cancel_callback(std::function<void(std::string)> cb) { cancel_callbacks_.push_back(cb); }
  protected:
   bool locked_() const { return child_lock_ && !allow_when_locked_; }
+  void cancel_(Button &button);
   void finish_clicks_(Button &button);
   void hold_(Button &button);
   void emit_(const Button &button, const std::string &gesture);

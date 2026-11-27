@@ -84,6 +84,16 @@ int main() {
   assert(callback.events==std::vector<std::string>{"touch:tap"});
   assert(callback.edges.back()=="touch:cancel"); callback.buttons.set_child_lock(false);
   callback.buttons.button_event("touch",false); callback.advance(350); assert(callback.events.size()==1);
+  // Another button pressed while the ring is held can cancel both: neither reports a gesture or release.
+  Rig chord; chord.buttons.add_on_press_callback([&](auto name){
+    if (name=="bottom") { chord.buttons.cancel("touch"); chord.buttons.cancel("bottom"); }
+  });
+  chord.buttons.button_event("touch",true); chord.advance(300); chord.buttons.button_event("bottom",true);
+  assert((chord.edges==std::vector<std::string>{"touch:press","bottom:press","touch:cancel","bottom:cancel"}));
+  chord.advance(1000); chord.buttons.button_event("bottom",false); chord.buttons.button_event("touch",false);
+  chord.advance(350); assert(chord.events.empty() && chord.edges.size()==4);
+  chord.click(); chord.advance(350); assert(chord.events==std::vector<std::string>{"touch:tap"});
+  Rig idle; idle.buttons.cancel("touch"); idle.buttons.cancel("unknown"); assert(idle.edges.empty());
   Rig press_lock; press_lock.buttons.add_on_press_callback([&](auto){press_lock.buttons.set_child_lock(true);});
   press_lock.click(); press_lock.buttons.set_child_lock(false); press_lock.advance(1000);
   assert(press_lock.events.empty());
