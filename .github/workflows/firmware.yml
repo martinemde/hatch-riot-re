@@ -45,7 +45,11 @@ jobs:
         run: esphome compile esphome/hatch-plus-power-compile.yaml
       - name: Compile standalone shared button classifier (never flash)
         run: esphome compile esphome/hatch-buttons-check.yaml
-      # Deliberately do not publish this binary: it contains CI-only credentials.
+      - name: Compile Rest+ example (validation only)
+        run: esphome compile esphome/hatch-plus-example.yaml
+      - name: Compile Rest+ example with Home Assistant button actions only (validation only)
+        run: esphome -s enable_local_button_actions false compile esphome/hatch-plus-example.yaml
+      # Deliberately do not publish these binaries: they contain CI-only credentials.
       - name: Remove temporary credentials
         if: always()
         run: rm -f esphome/secrets.yaml

@@ -1,0 +1,37 @@
+# ESPHome Builder starter for Hatch Rest+ 2nd gen. See docs/rest-plus-2-esphome.md.
+substitutions:
+  name: hatch-plus
+  friendly_name: Hatch Rest Plus
+  # Set to "false" to keep events but let Home Assistant handle button actions.
+  # enable_local_button_actions: "false"
+
+# The package and its components both follow main; change both refs together (e.g. to a release tag).
+external_components:
+  - source:
+      type: git
+      url: https://github.com/w1ll1am23/hatch-riot-re
+      ref: main
+      path: esphome/components
+    components: [hatch_accelerometer, hatch_buttons, hatch_display, hatch_expander, hatch_plus_power, hatch_scenes, sd_cache, speaker_source]
+    refresh: 1d
+
+packages:
+  hatch_rest_plus:
+    url: https://github.com/w1ll1am23/hatch-riot-re
+    ref: main
+    file: esphome/hatch-plus-base.yaml
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    password: !secret fallback_ap_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+      key: !secret api_encryption_key

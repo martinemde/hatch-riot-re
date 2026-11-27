@@ -1,0 +1,30 @@
+# Local checkout example. For ESPHome Builder, use hatch-plus-builder.yaml.
+substitutions:
+  name: hatch-plus
+  friendly_name: Hatch Rest Plus
+  # Set to "false" to keep events but let Home Assistant handle button actions.
+  # enable_local_button_actions: "false"
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [hatch_accelerometer, hatch_buttons, hatch_display, hatch_expander, hatch_plus_power, hatch_scenes, sd_cache, speaker_source]
+
+packages:
+  hatch_rest_plus: !include hatch-plus-base.yaml
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    password: !secret fallback_ap_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+      key: !secret api_encryption_key
