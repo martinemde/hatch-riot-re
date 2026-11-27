@@ -4,6 +4,8 @@ blueprint:
     Custom Home Assistant actions for all seven Hatch Rest / Rest+ buttons, with short,
     long, double and triple presses. Uses classified esphome.hatch_button firmware
     events; no raw touch sensor or favorites configuration is needed.
+    For custom firmware that sends these events: the Rest and Rest+ packages
+    from this repository send event entities instead.
 
 
     Match the event device name to your ESPHome node's device event field.

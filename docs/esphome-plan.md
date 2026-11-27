@@ -25,7 +25,7 @@ feature below was tested on the teardown unit (RIoT, Hatch Rest 2nd gen):
 |---|---|
 | RGBW night light | 4 × high-speed `ledc` (stock power caps) + `light: rgbw`; LED enable P1_0 as a `power_supply` |
 | Speaker | I2S → mono class-D amp; `speaker_source` media player with two sources: **Sendspin** (Music Assistant, discovered over mDNS) and `audio_http` (Home Assistant URLs). Amp enable P1_2 switched on only once the I2S clocks run (avoids a start-up pop), off 2 s after idle |
-| Buttons | volume ±, brightness ±, night light (expander P0_0–P0_4) with local actions; touch top (GPIO33, enable P0_5) and bottom button (GPIO36) exposed to Home Assistant |
+| Buttons | volume ±, brightness ±, night light (expander P0_0–P0_4), touch top (GPIO33, enable P0_5) and bottom button (GPIO36): `hatch_buttons` gestures with local actions and a Home Assistant event entity each, shared with the Rest+ |
 | Toddler lock | template switch that blocks the button actions; lock icon green |
 | Clock | `hatch_display` over UART1, 12 h time from Home Assistant, brightness control |
 | Status LEDs | Wi-Fi icon green / amber / red for HA connected / Wi-Fi only / offline |

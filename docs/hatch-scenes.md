@@ -62,12 +62,12 @@ C++ lambdas can call the same methods: `id(scenes).save()`, `save(slot)`,
 
 ## Touch ring
 
-On the Rest, the touch ring runs the scenes. Each touch acts when you let go:
+On the Rest and Rest+, the touch ring runs the scenes. Each touch acts when you let go:
 
 | Touch | Result |
 | --- | --- |
 | Tap | Load the next scene |
-| Hold 1 s | Turn off the night light and sound |
+| Hold 0.8 s | Turn off the night light and sound |
 | Hold 5 s | Save a new scene. The clock shows `SAV?` from 5 s. |
 | Hold 10 s | Delete the current scene. The clock shows `DEL?` from 10 s. |
 
@@ -76,7 +76,8 @@ does none of these. Toddler Lock turns the ring off like the other buttons.
 
 The ring now does on the device what the
 [touch ring favorites blueprint](../blueprints/automation/hatch-rest/touch-ring-favorites.yaml)
-does in Home Assistant. Don't use both, or each tap acts twice.
+did in Home Assistant. That blueprint needs the Touch binary sensor of v1.5 and
+earlier, which is now the Touch Ring event entity.
 
 ## What is saved
 

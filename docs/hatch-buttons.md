@@ -2,7 +2,10 @@
 
 `hatch_buttons` classifies named press/release edges. It is optional and model-neutral:
 no GPIO, light, media player, display, preferences, favorites or native actions.
-Existing Rest firmware and its raw-touch favorites blueprint are unchanged.
+The Rest and Rest+ packages already use it through
+[hatch-plus-controls.yaml](../esphome/hatch-plus-controls.yaml), which gives each
+control local actions and a Home Assistant event entity. The setup below is for
+custom configurations.
 
 ## Setup on either model
 
@@ -46,7 +49,7 @@ actions: the classifier does not disable them, so retaining actions may cause
 both raw-press behavior and classified automation behavior.
 
 The existing [hardware map](hardware-map.md#buttons) and
-[Rest base config](../esphome/hatch-rest-base.yaml) identify these inputs:
+[shared controls](../esphome/hatch-plus-controls.yaml) identify these inputs:
 
 | Name | Existing input | Active level |
 | --- | --- | --- |
@@ -60,13 +63,7 @@ The existing [hardware map](hardware-map.md#buttons) and
 
 These are the existing Rest RIoT and Rest+ RIoT+ button input mappings, not a new
 board definition. Touch still requires its existing expander P0_5 enable.
-For **Rest**, edit a copy of the existing Rest configuration; preserve its
-expander setup, touch filters and CONNECT/Improv behavior as needed.
-For **Rest+**, add the component to a working, hardware-verified Rest+ config;
-preserve its power/latch management and button input setup. Do not flash the
-Rest image or the compile fixture to a Rest+ to test this component. The
-[Rest+ power guide](rest-plus-power.md) describes that separate integration.
-No new GPIO assignment or Rest+ hardware image is supplied here.
+Do not flash the compile fixture to either model to test this component.
 
 ## Gesture contract
 
@@ -122,8 +119,9 @@ action lists. Use those names with the blueprint; custom names remain valid in
 firmware and custom automations. Match `event_device_name` to the event's `device`
 field. Enable Home Assistant actions in the ESPHome integration. Empty actions do
 nothing. The optional blueprint lock gates HA actions only; use the firmware lock
-to cancel pending gestures. The existing raw Rest blueprint is independent;
-disable overlapping automations if you choose the classified-event blueprint.
+to cancel pending gestures. The Rest and Rest+ packages do not send
+`esphome.hatch_button`; use their event entities instead. The blueprint is for
+custom configurations that send the event as shown above.
 
 ## Testing both models
 

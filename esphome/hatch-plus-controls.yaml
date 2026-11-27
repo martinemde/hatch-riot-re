@@ -1,5 +1,6 @@
-# Local controls for the Hatch Rest+ 2. The parent package supplies the expander,
-# light, player, display, SD card cache, and scenes.
+# Local controls for the Hatch Rest and Rest+ 2, which wire their buttons the same
+# way. The parent package supplies the expander, light, player, display, SD card
+# cache, and scenes.
 substitutions:
   hatch_plus_hold_ms: "800"
   enable_local_button_actions: "true"

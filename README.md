@@ -105,6 +105,10 @@ These parts needed custom code (local components in [`esphome/components/`](esph
 
 ### Touch ring blueprint
 
+This blueprint works with Rest firmware v1.5 and earlier only: it needs the Touch binary sensor. Newer firmware runs
+[scenes](docs/hatch-scenes.md#touch-ring) on the ring itself and sends a Touch Ring event entity instead (see
+[upgrading from v1.5](esphome/README.md#upgrading-from-v15)).
+
 [`blueprints/automation/hatch-rest/touch-ring-favorites.yaml`](blueprints/automation/hatch-rest/touch-ring-favorites.yaml)
 brings back the stock touch ring in Home Assistant: **tap** to cycle through a list of favorites (scenes or scripts
 that set the light and speaker), **touch and hold** (1 s, like stock) to turn the light and sound off. Pick the touch

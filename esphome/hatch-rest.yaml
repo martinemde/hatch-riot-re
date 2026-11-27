@@ -8,12 +8,14 @@
 substitutions:
   name: hatch-rest
   friendly_name: Hatch Rest
+  # Set to "false" to keep events but let Home Assistant handle button actions.
+  # enable_local_button_actions: "false"
 
 external_components:
   - source:
       type: local
       path: components
-    components: [hatch_expander, hatch_accelerometer, hatch_display, hatch_scenes, hatch_status_led, sd_cache, speaker_source]
+    components: [hatch_expander, hatch_accelerometer, hatch_buttons, hatch_display, hatch_scenes, hatch_status_led, sd_cache, speaker_source]
 
 packages:
   hatch_rest: !include hatch-rest-base.yaml

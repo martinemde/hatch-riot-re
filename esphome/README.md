@@ -9,7 +9,7 @@
 
 | File | Purpose |
 |---|---|
-| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons, touch, clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache, repeat. Shared base; no `external_components` |
+| `hatch-rest-base.yaml` | **stock replacement** for the Hatch Rest 2nd gen (RIoT): night light, speaker (Home Assistant media + **Music Assistant via Sendspin**), buttons and touch ring (local actions + Home Assistant events), clock (or custom text), status LEDs, toddler lock, Bluetooth Wi-Fi setup (Improv), optional SD card audio cache, repeat. Shared base; no `external_components` |
 | `hatch-rest.yaml` | local build: base + components from `components/` |
 | `hatch-rest-builder.yaml` | ESPHome Builder add-on: base + components pulled from GitHub (see [below](#esphome-builder-add-on)) |
 | `hatch-plus-builder.yaml` | Rest+ 2nd gen: a short ESPHome Builder config that loads the version-pinned package |
@@ -69,28 +69,49 @@ back up with `../scripts/backup.sh`, then flash `hatch-rest.yaml` or the Builder
 ### Upgrading from v1.5
 
 Some Home Assistant entities are replaced. Their entity IDs change, for example from
-`number.hatch_rest_a1b2c3_display_brightness` to `light.hatch_rest_a1b2c3_clock_display`. Update automations and
+`number.hatch_rest_a1b2c3_display_brightness` to `light.hatch_rest_a1b2c3_clock_display`, and from
+`binary_sensor.hatch_rest_a1b2c3_touch` to `event.hatch_rest_a1b2c3_touch_ring`. Update automations and
 dashboards that use them, then delete the old entities in Home Assistant.
 
 | v1.5 and earlier | Now |
 |---|---|
 | Display Brightness (number, 0–15) | Clock Display (light): set its brightness, or turn it off to turn the display off |
+| Touch, Bottom Button, Night Light Button, Volume Up / Down Button, Brightness Up / Down Button (binary sensors) | Touch Ring, Bottom Button, Night Light Button, Volume Up / Down Button, Brightness Up / Down Button ([event entities](#buttons)) |
+
+An automation that watched a button's binary sensor turn on now watches its event entity's `event_type`. The
+[touch ring favorites blueprint](../blueprints/automation/hatch-rest/touch-ring-favorites.yaml) needs the old Touch
+binary sensor, so it only works with v1.5 and earlier. The ring now runs [scenes](../docs/hatch-scenes.md#touch-ring)
+on the device instead.
 
 ## Buttons
 
-| Control | Action |
-|---|---|
-| Volume up / down | Volume |
-| Brightness up / down | Night light brightness |
-| Night light | Night light on / off |
-| Touch ring held, then hold night light | Cycle the night light through the colours (white off); release either to stop on a colour |
-| Touch ring held, then hold brightness up / down | Make the white light warmer / cooler; release either to stop |
-| Touch ring held, then volume up / down | Play the next / previous file in the [SD card cache](#sd-card-cache) |
-| Bottom button, short press | Show the Wi-Fi and toddler lock status LEDs for 30 s |
-| Bottom button, held | Authorize [Bluetooth Wi-Fi setup](#wi-fi-setup-over-bluetooth-improv) |
+The Rest uses the Rest+ [button controls](../esphome/hatch-plus-controls.yaml). Each control has a Home Assistant
+event entity, and its `event_type` attribute is the gesture. A hold is 0.8 s. The
+[Rest+ guide](../docs/rest-plus-2-esphome.md#automate-a-button-gesture) shows an automation that uses one.
 
-The toddler lock disables everything except the bottom button. Touch the ring before pressing the other button:
-a button pressed first does its normal action.
+| Control | Event types | Local action |
+|---|---|---|
+| Touch Ring | `tap`, `hold`, `double`, `triple` | Tap: next [scene](../docs/hatch-scenes.md#touch-ring). Hold: night light and sound off; 5 s: save a new scene; 10 s: delete the current scene. Holds act on release. |
+| Volume Up / Down Button | `tap`, `hold` | Tap: volume one step. Hold: repeat until release. |
+| Brightness Up / Down Button | `tap`, `hold` | Tap: night light brightness one step. Hold: repeat until release. |
+| Night Light Button | `tap`, `hold`, `double`, `triple` | Tap: night light on / off |
+| Bottom Button | `tap`, `hold`, `double`, `triple` | Short press: show the Wi-Fi and toddler lock status LEDs for 30 s. Hold: authorize [Bluetooth Wi-Fi setup](#wi-fi-setup-over-bluetooth-improv). |
+
+| With the touch ring held | Local action |
+|---|---|
+| Hold night light | Cycle the night light through the colours (white off); release either to stop on a colour |
+| Hold brightness up / down | Make the white light warmer / cooler; release either to stop |
+| Volume up / down | Play the next / previous file in the [SD card cache](#sd-card-cache) |
+
+Touch the ring before pressing the other button: a button pressed first does its normal action. Neither sends an
+event for the combination. Touch ring and night light taps act 0.35 s after release, once they can't be a double tap.
+Volume and brightness taps act on release.
+
+The toddler lock stops the gestures, their events and their local actions. The bottom button still shows the status
+LEDs and authorizes Bluetooth setup.
+
+To let Home Assistant handle the buttons, set `enable_local_button_actions: "false"` in `substitutions:`. The events
+stay; the local actions above stop, except the bottom button's.
 
 The night light has a single white LED, so "warmth" mixes amber from the red and green LEDs into it, from none
 (plain white) to full. Cached files are cycled in file-name order, which is a hash of the URL: effectively random,

@@ -5,14 +5,19 @@
 #
 # Flash ONLY after ../scripts/backup.sh has made and verified a full-flash backup.
 #
-# This is the shared base config. It needs the local components hatch_expander, hatch_display, hatch_scenes and
-# hatch_status_led, which the top-level file provides via `external_components`:
+# This is the shared base config. It needs the local components hatch_expander, hatch_buttons, hatch_display,
+# hatch_scenes and hatch_status_led, which the top-level file provides via `external_components`:
 #   hatch-rest.yaml          - local development (components from ./components)
 #   hatch-rest-builder.yaml  - ESPHome Builder add-on (config and components from GitHub)
 
 substitutions:
   name: hatch-rest
   friendly_name: Hatch Rest
+
+# The buttons and touch ring are wired as on the Rest+, so both share its controls: local actions and a Home
+# Assistant event entity per control.
+packages:
+  controls: !include hatch-plus-controls.yaml
 
 esphome:
   name: ${name}
@@ -408,16 +413,10 @@ switch:
       - lambda: id(sd_cache_source).set_enabled(true);
     on_turn_off:
       - lambda: id(sd_cache_source).set_enabled(false);
-  # Toddler lock: ignore the hardware buttons. Shown green in the lock window.
-  - platform: template
-    id: toddler_lock
-    name: Toddler Lock
+  # Toddler lock (from the controls): shown green in the lock window.
+  - id: !extend toddler_lock
     icon: mdi:lock
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    on_turn_on:
-      - script.execute: update_status_leds
-    on_turn_off:
+    on_state:
       - script.execute: update_status_leds
   # Display mode: on = clock, off = the "Display Text" entity.
   - platform: template
@@ -433,160 +432,15 @@ switch:
 
 # ---------------------------------------------------------------- Buttons
 binary_sensor:
-  - platform: gpio
-    id: btn_volume_up
-    name: Volume Up Button
-    pin: {hatch_expander: io_exp, number: 0, mode: input, inverted: true}
-    filters:
-      - delayed_on: 30ms
-    on_press:
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - if:
-                condition: {binary_sensor.is_on: touch}
-                then:
-                  - script.execute: ring_used_as_modifier
-                  - script.execute: {id: play_cached_audio, step: 1}
-                else:
-                  - media_player.volume_up: player
-  - platform: gpio
-    id: btn_brightness_up
-    name: Brightness Up Button
-    pin: {hatch_expander: io_exp, number: 1, mode: input, inverted: true}
-    filters:
-      - delayed_on: 30ms
-    on_press:
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - if:
-                condition: {binary_sensor.is_on: touch}
-                then:
-                  - script.execute: ring_used_as_modifier
-                  - script.execute: {id: adjust_white_warmth, step: 0.02}
-                else:
-                  - light.dim_relative:
-                      id: night_light
-                      relative_brightness: 10%
-  - platform: gpio
-    id: btn_night_light
-    name: Night Light Button
-    pin: {hatch_expander: io_exp, number: 2, mode: input, inverted: true}
-    filters:
-      - delayed_on: 30ms
-    on_press:
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - if:
-                condition: {binary_sensor.is_on: touch}
-                then:
-                  - script.execute: ring_used_as_modifier
-                  - script.execute: cycle_night_light_colour
-                else:
-                  - light.toggle: night_light
-  - platform: gpio
-    id: btn_volume_down
-    name: Volume Down Button
-    pin: {hatch_expander: io_exp, number: 3, mode: input, inverted: true}
-    filters:
-      - delayed_on: 30ms
-    on_press:
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - if:
-                condition: {binary_sensor.is_on: touch}
-                then:
-                  - script.execute: ring_used_as_modifier
-                  - script.execute: {id: play_cached_audio, step: -1}
-                else:
-                  - media_player.volume_down: player
-  - platform: gpio
-    id: btn_brightness_down
-    name: Brightness Down Button
-    pin: {hatch_expander: io_exp, number: 4, mode: input, inverted: true}
-    filters:
-      - delayed_on: 30ms
-    on_press:
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - if:
-                condition: {binary_sensor.is_on: touch}
-                then:
-                  - script.execute: ring_used_as_modifier
-                  - script.execute: {id: adjust_white_warmth, step: -0.02}
-                else:
-                  - light.dim_relative:
-                      id: night_light
-                      relative_brightness: -10%
-  # Top touch (touch controller output, active high). Debounced: a touch must last 50 ms to count (drops noise
-  # spikes), and short dropouts while held are bridged so a hold isn't split into a tap plus a new touch.
-  # On its own, it runs the scenes, acting on release:
-  #   tap = next scene, hold 1 s = night light and sound off, 5 s = save a new scene (SAV? shows),
-  #   10 s = delete the current scene (DEL? shows).
-  # Held, it changes what the front buttons do instead (touch first, then the button):
-  #   night light (hold) = cycle colours, brightness up / down (hold) = warmer / cooler white,
-  #   volume up / down = next / previous file in the SD card cache.
-  - platform: gpio
-    id: touch
-    name: Touch
-    pin: GPIO33
-    filters:
-      - delayed_on: 50ms
-      - delayed_off: 100ms
-    on_press:
-      - lambda: |-
-          id(ring_pressed_ms) = millis();
-          id(ring_was_modifier) = false;
-      - if:
-          condition: {switch.is_off: toddler_lock}
-          then:
-            - script.execute: ring_hold_preview
-    on_release:
-      - script.stop: ring_hold_preview
-      - lambda: |-
-          if (id(toddler_lock).state || id(ring_was_modifier)) {
-            id(clock_display).clear_overlay();
-            return;
-          }
-          const uint32_t held = millis() - id(ring_pressed_ms);
-          if (held < 1000) {
-            id(scenes).next();
-          } else if (held < 5000) {
-            id(night_light).turn_off().perform();
-            id(player).make_call().set_command(media_player::MEDIA_PLAYER_COMMAND_STOP).perform();
-          } else if (held < 10000) {
-            id(scenes).save();
-          } else {
-            id(scenes).remove();
-          }
-  # Bottom "CONNECT" button (active low). Stock: hold >2 s = Bluetooth setup; exposed to Home Assistant here.
-  # A short press shows the status LEDs for 30 s (works with the toddler lock on: it only shows status).
-  - platform: gpio
-    id: btn_bottom
-    name: Bottom Button
-    pin:
-      number: GPIO36
-      inverted: true
+  # Bottom "CONNECT" button (from the controls). Stock: hold >2 s = Bluetooth setup (Improv, above).
+  # A short press shows the status LEDs for 30 s. It bypasses the button classifier, so it also works with the
+  # toddler lock on: it only shows status.
+  - id: !extend btn_bottom
     on_click:
       - min_length: 50ms
         max_length: 1500ms
         then:
           - script.execute: show_status_leds
-
-globals:
-  # Where the night light colour cycle is on the colour wheel (degrees).
-  - id: night_light_hue
-    type: int
-    initial_value: '0'
-  # When the touch ring was last pressed (millis), and whether a front button was used with it since.
-  - id: ring_pressed_ms
-    type: uint32_t
-  - id: ring_was_modifier
-    type: bool
 
 # ---------------------------------------------------------------- Clock display (display MCU over UART1)
 uart:
@@ -682,79 +536,6 @@ script:
       - lambda: |-
           id(status_leds).set(hatch_status_led::WINDOW_WIFI, hatch_status_led::COLOUR_OFF);
           id(status_leds).set(hatch_status_led::WINDOW_LOCK, hatch_status_led::COLOUR_OFF);
-
-  # While the touch ring is held on its own, show what letting go will do once it changes from "off" to a scene.
-  - id: ring_hold_preview
-    mode: restart
-    then:
-      - delay: 5s
-      - lambda: id(clock_display).show_text_overlay("SAV?", 0);
-      - delay: 5s
-      - lambda: id(clock_display).show_text_overlay("DEL?", 0);
-  # A front button pressed while the ring is held: this touch is a modifier, not a scene gesture.
-  - id: ring_used_as_modifier
-    then:
-      - lambda: id(ring_was_modifier) = true;
-      - script.stop: ring_hold_preview
-      - lambda: id(clock_display).clear_overlay();
-  # Touch ring + night light button held: sweep the night light around the colour wheel (white off), about 6 s per
-  # turn, from the current colour. It stops on the colour it's at when either is released.
-  - id: cycle_night_light_colour
-    mode: single
-    then:
-      - lambda: |-
-          auto &v = id(night_light).remote_values;
-          float s, val;
-          rgb_to_hsv(v.get_red(), v.get_green(), v.get_blue(), id(night_light_hue), s, val);
-      - while:
-          condition:
-            lambda: return id(touch).state && id(btn_night_light).state;
-          then:
-            - lambda: |-
-                id(night_light_hue) = (id(night_light_hue) + 3) % 360;
-                float r, g, b;
-                hsv_to_rgb(id(night_light_hue), 1.0f, 1.0f, r, g, b);
-                auto call = id(night_light).turn_on();
-                call.set_rgb(r, g, b);
-                call.set_color_brightness(1.0f);
-                call.set_white(0.0f);
-                call.set_transition_length(0);
-                call.perform();
-            - delay: 50ms
-  # Touch ring + brightness up / down held: make the white light warmer / cooler (full range in 2.5 s), stopping on
-  # release. The LEDs have a single white channel, so warmth is amber from the red and green LEDs mixed into it:
-  # none = plain white, full = amber at full strength.
-  - id: adjust_white_warmth
-    mode: single
-    parameters:
-      step: float
-    then:
-      - while:
-          condition:
-            lambda: |-
-              return id(touch).state && (step > 0 ? id(btn_brightness_up).state : id(btn_brightness_down).state);
-          then:
-            - lambda: |-
-                auto &v = id(night_light).remote_values;
-                float warmth = v.get_white() > 0.0f ? v.get_color_brightness() : 0.0f;
-                auto call = id(night_light).turn_on();
-                call.set_rgb(1.0f, 0.4f, 0.0f);
-                call.set_color_brightness(clamp(warmth + step, 0.0f, 1.0f));
-                call.set_white(1.0f);
-                call.set_transition_length(0);
-                call.perform();
-            - delay: 50ms
-  # Touch ring + volume up / down: play the next / previous file in the SD card cache. The order is by file name,
-  # which is a hash of the URL, so effectively random but fixed. Does nothing with the cache off or empty.
-  - id: play_cached_audio
-    mode: single
-    parameters:
-      step: int
-    then:
-      - lambda: |-
-          auto uri = id(sd_cache_source).cached_uri(step);
-          if (!uri.empty())
-            id(player).make_call().set_media_url(uri).perform();
 
 hatch_status_led:
   id: status_leds
