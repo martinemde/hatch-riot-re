@@ -59,6 +59,8 @@ and turn on **Enabled**.
 | Tilt Angle | Read the angle in degrees. The package reports changes of at least 2°. |
 | Upright | Trigger an automation when the Hatch becomes upright or leaves the upright position. |
 | Wi-Fi Signal, Uptime | Read the connection strength and the time since the last restart. |
+| Automatic Indicators | Turn off to stop the firmware from driving the bottom indicator windows. See [Status indicators](#status-indicators). |
+| Wi-Fi Indicator, Battery Indicator, Toddler Lock Indicator | Read or set the colour of each bottom window: `Off`, `Red`, `Yellow`, or `Green`. |
 | Restart | Restart the device. |
 
 The ESPHome integration also exposes device actions in **Developer tools** >
@@ -168,6 +170,37 @@ The trigger watches the event entity's timestamp, not changes to its
 attributes. The condition skips initial entity registration and transitions
 from `unavailable`.
 
+### Status indicators
+
+The three small windows on the bottom of the Rest+ show Wi-Fi, battery, and
+toddler lock status. Each window is a red/green LED. It shows only red,
+green, or yellow (both on), and has no brightness control. For that reason,
+each window is a select entity with the options `Off`, `Red`, `Yellow`, and
+`Green`, not a light.
+
+**Automatic Indicators** is on by default and follows the stock firmware.
+The windows light only while the Hatch is not upright: tipped more than about
+60°, on its side, or upside down. While the Hatch is upright, or the
+accelerometer has no valid reading, all three windows are off.
+
+| Window | Red | Yellow | Green | Off |
+| --- | --- | --- | --- | --- |
+| Wi-Fi | No Wi-Fi connection | Wi-Fi, but no Home Assistant connection | Connected to Home Assistant | — |
+| Battery | 10% or less | 11% to 20% | Above 20% | No battery reading yet |
+| Toddler Lock | Toddler Lock is on | — | — | Toddler Lock is off |
+
+Stock firmware turns the Wi-Fi window green when the Hatch cloud is
+connected. This package uses the Home Assistant connection instead. On the
+Rest package, the lock window is green; on the Rest+, stock uses red.
+
+To take over the windows from Home Assistant, select a colour on any
+indicator entity. This turns **Automatic Indicators** off and turns the other
+two windows off. The windows then keep the colours you set, also while
+upright. To stop the automatic behaviour and keep the windows dark, turn
+**Automatic Indicators** off. Turn it back on to return to stock behaviour.
+The setting is kept across restarts. The windows are off at boot until the
+power controller is ready, and the controller turns them off at shutdown.
+
 ## Installation and recovery
 
 This example does not provide a first-install or return-to-stock path. Identify
@@ -200,6 +233,8 @@ esp32_ble: !remove
   physical control to its local action and native event entity.
 - [hatch-plus-scenes.yaml](../esphome/hatch-plus-scenes.yaml) wires the local
   scenes, stock sounds, and clock settings into the same package.
+- [hatch-plus-indicators.yaml](../esphome/hatch-plus-indicators.yaml) drives
+  the bottom indicator windows.
 
 The device YAML provides the components. The local example builds them from
 this checkout. The Builder starter takes the package and the components from

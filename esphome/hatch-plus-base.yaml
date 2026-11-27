@@ -3,6 +3,7 @@
 packages:
   controls: !include hatch-plus-controls.yaml
   scenes: !include hatch-plus-scenes.yaml
+  indicators: !include hatch-plus-indicators.yaml
 
 esphome:
   name: ${name}
@@ -240,6 +241,7 @@ hatch_accelerometer:
     filters:
       - delta: 2.0
   upright:
+    id: hatch_upright
     name: Upright
 
 hatch_plus_power:

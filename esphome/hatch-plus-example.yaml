@@ -9,7 +9,7 @@ external_components:
   - source:
       type: local
       path: components
-    components: [hatch_accelerometer, hatch_buttons, hatch_display, hatch_expander, hatch_plus_power, hatch_scenes, sd_cache, speaker_source]
+    components: [hatch_accelerometer, hatch_buttons, hatch_display, hatch_expander, hatch_plus_indicator, hatch_plus_power, hatch_scenes, sd_cache, speaker_source]
 
 packages:
   hatch_rest_plus: !include hatch-plus-base.yaml

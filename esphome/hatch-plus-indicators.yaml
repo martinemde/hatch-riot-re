@@ -1,0 +1,107 @@
+# Bottom indicator windows (Wi-Fi, battery, toddler lock). The parent package supplies the power owner, the
+# accelerometer's Upright sensor, and the Toddler Lock switch.
+hatch_plus_indicator:
+  - id: wifi_indicator
+    indicator: wifi
+    hatch_plus_power_id: plus_power
+  - id: battery_indicator
+    indicator: battery
+    hatch_plus_power_id: plus_power
+  - id: lock_indicator
+    indicator: lock
+    hatch_plus_power_id: plus_power
+
+# Each select shows the window's colour, set by Automatic Indicators or from Home Assistant. Choosing a colour turns
+# Automatic Indicators off, which also turns the other windows off. Option order matches hatch_plus_indicator::Color.
+select:
+  - platform: template
+    id: wifi_indicator_select
+    name: Wi-Fi Indicator
+    icon: mdi:wifi
+    entity_category: config
+    options: ["Off", "Red", "Yellow", "Green"]
+    initial_option: "Off"
+    optimistic: true
+    set_action:
+      - script.execute: hatch_take_over_indicators
+    on_value:
+      - lambda: id(wifi_indicator).set_color(static_cast<hatch_plus_indicator::Color>(i));
+  - platform: template
+    id: battery_indicator_select
+    name: Battery Indicator
+    icon: mdi:battery
+    entity_category: config
+    options: ["Off", "Red", "Yellow", "Green"]
+    initial_option: "Off"
+    optimistic: true
+    set_action:
+      - script.execute: hatch_take_over_indicators
+    on_value:
+      - lambda: id(battery_indicator).set_color(static_cast<hatch_plus_indicator::Color>(i));
+  - platform: template
+    id: lock_indicator_select
+    name: Toddler Lock Indicator
+    icon: mdi:lock
+    entity_category: config
+    options: ["Off", "Red", "Yellow", "Green"]
+    initial_option: "Off"
+    optimistic: true
+    set_action:
+      - script.execute: hatch_take_over_indicators
+    on_value:
+      - lambda: id(lock_indicator).set_color(static_cast<hatch_plus_indicator::Color>(i));
+
+switch:
+  - platform: template
+    id: automatic_indicators
+    name: Automatic Indicators
+    icon: mdi:led-on
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: hatch_update_indicators
+    on_turn_off:
+      - lambda: |-
+          id(wifi_indicator_select).publish_state("Off");
+          id(battery_indicator_select).publish_state("Off");
+          id(lock_indicator_select).publish_state("Off");
+
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            switch.is_on: automatic_indicators
+          then:
+            - script.execute: hatch_update_indicators
+
+script:
+  - id: hatch_take_over_indicators
+    then:
+      - if:
+          condition:
+            switch.is_on: automatic_indicators
+          then:
+            - switch.turn_off: automatic_indicators
+  # Stock 7.1.645 status logic. The windows are lit only while the unit is not upright (tipped past about 60°, or
+  # upside down), and are off while the accelerometer has no valid reading.
+  - id: hatch_update_indicators
+    then:
+      - lambda: |-
+          const char *wifi = "Off", *battery = "Off", *lock = "Off";
+          if (id(hatch_upright).has_state() && !id(hatch_upright).state) {
+            // Stock: green = Hatch cloud connected, yellow = Wi-Fi only. Home Assistant takes the cloud's place.
+            if (!wifi::global_wifi_component->is_connected()) wifi = "Red";
+            else wifi = api::global_api_server->is_connected() ? "Green" : "Yellow";
+            // Stock thresholds on the reported percentage: 0-10 red, 11-20 yellow, above 20 green.
+            const float percent = id(plus_power).indicator_battery_percent();
+            if (!std::isnan(percent)) battery = percent > 20 ? "Green" : percent > 10 ? "Yellow" : "Red";
+            if (id(toddler_lock).state) lock = "Red";
+          }
+          auto show = [](select::Select *select, const char *option) {
+            if (select->current_option() != option) select->publish_state(option);
+          };
+          show(id(wifi_indicator_select), wifi);
+          show(id(battery_indicator_select), battery);
+          show(id(lock_indicator_select), lock);
